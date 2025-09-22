@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "826673967447",
+    "project_id": "rikkahub-32bit",
+    "storage_bucket": "rikkahub-32bit.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:826673967447:android:cb6597d31a86541182ce12",
+        "android_client_info": {
+          "package_name": "com.ay.ay"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEGbdEhYrXfuBeOHNVGuPAHopq1ZCXnC8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:826673967447:android:589a007fc55c214182ce12",
+        "android_client_info": {
+          "package_name": "me.rerere.rikkahub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEGbdEhYrXfuBeOHNVGuPAHopq1ZCXnC8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:826673967447:android:d9f5e5ff69440e5182ce12",
+        "android_client_info": {
+          "package_name": "me.rerere.rikkahub.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEGbdEhYrXfuBeOHNVGuPAHopq1ZCXnC8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
