@@ -27,10 +27,6 @@ android {
         versionName = "1.6.10-debug"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64", "armeabi-v7a")
-        }
     }
 
     packaging {
