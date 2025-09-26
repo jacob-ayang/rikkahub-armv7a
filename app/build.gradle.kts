@@ -33,6 +33,21 @@ android {
         }
     }
 
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/license.txt"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+            excludes += "META-INF/notice.txt"
+            excludes += "META-INF/*.kotlin_module"
+        }
+    }
+
     splits {
         abi {
             // AppBundle tasks usually contain "bundle" in their name
@@ -41,7 +56,7 @@ android {
             isEnable = !isBuildingBundle
             reset()
             include("arm64-v8a", "x86_64", "armeabi-v7a")
-            isUniversalApk = true
+            isUniversalApk = false
         }
     }
 
