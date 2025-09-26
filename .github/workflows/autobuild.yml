@@ -56,18 +56,45 @@ jobs:
     - name: Create output directory
       run: mkdir -p release_output
 
-    - name: Build Release APKs
+    - name: Build ARMv7a Release
       run: |
         chmod +x gradlew
-        ./gradlew assembleRelease --info --stacktrace
+        ANDROID_ABI=armeabi-v7a ./gradlew assembleRelease --info --stacktrace
+        mkdir -p release_output/v7a
+        cp app/build/outputs/apk/release/rikkahub_*_armeabi-v7a-release.apk release_output/v7a/
 
-    - name: Copy APKs and generate checksums
+    - name: Build ARM64v8a Release
       run: |
-        cp app/build/outputs/apk/release/*.apk release_output/
+        ANDROID_ABI=arm64-v8a ./gradlew assembleRelease --info --stacktrace
+        mkdir -p release_output/v8a
+        cp app/build/outputs/apk/release/rikkahub_*_arm64-v8a-release.apk release_output/v8a/
+
+    - name: Build x86_64 Release
+      run: |
+        ANDROID_ABI=x86_64 ./gradlew assembleRelease --info --stacktrace
+        mkdir -p release_output/x64
+        cp app/build/outputs/apk/release/rikkahub_*_x86_64-release.apk release_output/x64/
+
+    - name: Generate checksums and structure info
+      run: |
         cd release_output
-        sha256sum * > SHA256SUMS.txt
+        echo "# ARMv7a (32-bit)" > STRUCTURE.md
+        ls -l v7a >> STRUCTURE.md
+        echo -e "\n# ARM64v8a (64-bit)" >> STRUCTURE.md
+        ls -l v8a >> STRUCTURE.md
+        echo -e "\n# x86_64" >> STRUCTURE.md
+        ls -l x64 >> STRUCTURE.md
+        
+        echo "# SHA256 Checksums" > SHA256SUMS.txt
+        echo -e "\n## ARMv7a (32-bit)" >> SHA256SUMS.txt
+        cd v7a && sha256sum * >> ../SHA256SUMS.txt && cd ..
+        echo -e "\n## ARM64v8a (64-bit)" >> SHA256SUMS.txt
+        cd v8a && sha256sum * >> ../SHA256SUMS.txt && cd ..
+        echo -e "\n## x86_64" >> SHA256SUMS.txt
+        cd x64 && sha256sum * >> ../SHA256SUMS.txt && cd ..
+        
         echo "CHECKSUMS=$(cat SHA256SUMS.txt)" >> $GITHUB_ENV
-        ls -l
+        echo "STRUCTURE=$(cat STRUCTURE.md)" >> $GITHUB_ENV
 
     - name: Commit version update
       run: |
@@ -88,11 +115,20 @@ jobs:
           Version: ${{ steps.version.outputs.new_version }}
           Triggered by: ${{ github.event_name }}
           Commit: ${{ github.sha }}
+
+          ## 📦 Available APKs
           
-          **SHA256 Checksums**
+          ${{ env.STRUCTURE }}
+          
+          ## 🔐 SHA256 Checksums
           ```
           ${{ env.CHECKSUMS }}
           ```
+          
+          ## 📱 Architecture Guide
+          - ARMv7a (32-bit): For older Android devices or compatibility mode
+          - ARM64v8a (64-bit): For modern Android devices (recommended)
+          - x86_64: For Android emulators and rare x86_64 devices
         files: release_output/*
         draft: false
         prerelease: true
