@@ -23,8 +23,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 36
-        versionCode = 106
-        versionName = "1.6.7"
+        versionCode = 107
+        versionName = "1.6.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -35,7 +35,10 @@ android {
 
     splits {
         abi {
-            isEnable = true
+            // AppBundle tasks usually contain "bundle" in their name
+            //noinspection WrongGradleMethod
+            val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
+            isEnable = !isBuildingBundle
             reset()
             include("arm64-v8a", "x86_64", "armeabi-v7a")
             isUniversalApk = true
