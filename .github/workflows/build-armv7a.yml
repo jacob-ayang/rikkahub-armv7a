@@ -1,24 +1,33 @@
-name: Build ARMv7a
+name: Build and Release ARMv7a
 
 on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g. v1.0.0-armv7)'
+        required: true
+      release_title:
+        description: 'Release title'
+        required: true
+      release_notes:
+        description: 'Release notes'
+        required: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
     - name: Set up JDK 17
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: 'gradle'
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
@@ -28,26 +37,35 @@ jobs:
         
     - name: Setup Gradle
       uses: gradle/gradle-build-action@v2
-      with:
-        cache-disabled: true
       
-    - name: Build ARMv7a
+    - name: Build ARMv7a Release
       run: |
-        ./gradlew assembleDebug --info --stacktrace
+        ./gradlew assembleRelease --info --stacktrace
       env:
         ANDROID_ABI: "armeabi-v7a"
         
     - name: Create output directory
       run: mkdir -p v7output
 
-    - name: Copy APK to output directory
+    - name: Copy APK and generate checksum
       run: |
-        cp app/build/outputs/apk/debug/rikkahub_*_armeabi-v7a-debug.apk v7output/
-        ls -l v7output
+        cp app/build/outputs/apk/release/rikkahub_*_armeabi-v7a-release.apk v7output/
+        cd v7output
+        sha256sum * > SHA256SUMS.txt
+        ls -l
 
-    - name: Upload Debug APK
-      uses: actions/upload-artifact@v4
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
       with:
-        name: app-debug-armv7a
-        path: v7output
-        compression-level: 9
+        tag_name: ${{ github.event.inputs.release_tag }}
+        name: ${{ github.event.inputs.release_title }}
+        body: |
+          ${{ github.event.inputs.release_notes }}
+          
+          **SHA256 Checksums**
+          \`\`\`
+          ${{ cat v7output/SHA256SUMS.txt }}
+          \`\`\`
+        files: v7output/*
+        draft: false
+        prerelease: false
