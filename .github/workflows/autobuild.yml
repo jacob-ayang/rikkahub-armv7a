@@ -38,13 +38,15 @@ jobs:
         echo "current_code=$CURRENT_CODE" >> $GITHUB_OUTPUT
         
         # 计算新版本号（增加最后一个数字）
-        NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{$NF+=1;OFS=".";print $0}')
+        VERSION_BASE=$(echo $CURRENT_VERSION | sed 's/-debug$//' | cut -d'.' -f1,2)
+        VERSION_PATCH=$(echo $CURRENT_VERSION | sed 's/-debug$//' | cut -d'.' -f3)
+        NEW_VERSION="${VERSION_BASE}.$(($VERSION_PATCH + 1))-debug"
         NEW_CODE=$((CURRENT_CODE + 1))
         echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
         echo "new_code=$NEW_CODE" >> $GITHUB_OUTPUT
         
         # 设置发布tag
-        echo "release_tag=v${NEW_VERSION}-pre" >> $GITHUB_OUTPUT
+        echo "release_tag=v${NEW_VERSION}" >> $GITHUB_OUTPUT
 
     - name: Update version in build.gradle.kts
       uses: jacobtomlinson/gha-find-replace@v3
