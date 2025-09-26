@@ -1,0 +1,98 @@
+name: Auto Build and Pre-release
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    types: [ "closed" ]
+    branches: [ "master" ]
+
+jobs:
+  check_and_build:
+    # 只在 push 或 PR 被合并时运行
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'gradle'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Read current version
+      id: version
+      run: |
+        # 从build.gradle.kts读取当前版本号
+        CURRENT_VERSION=$(grep 'versionName = ' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+        CURRENT_CODE=$(grep 'versionCode = ' app/build.gradle.kts | sed 's/.*= \(.*\)/\1/')
+        echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        echo "current_code=$CURRENT_CODE" >> $GITHUB_OUTPUT
+        
+        # 计算新版本号（增加最后一个数字）
+        NEW_VERSION=$(echo $CURRENT_VERSION | awk -F. '{$NF+=1;OFS=".";print $0}')
+        NEW_CODE=$((CURRENT_CODE + 1))
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "new_code=$NEW_CODE" >> $GITHUB_OUTPUT
+        
+        # 设置发布tag
+        echo "release_tag=v${NEW_VERSION}-pre" >> $GITHUB_OUTPUT
+
+    - name: Update version in build.gradle.kts
+      uses: jacobtomlinson/gha-find-replace@v3
+      with:
+        find: 'versionCode = ${{ steps.version.outputs.current_code }}\n        versionName = "${{ steps.version.outputs.current_version }}"'
+        replace: 'versionCode = ${{ steps.version.outputs.new_code }}\n        versionName = "${{ steps.version.outputs.new_version }}"'
+        include: "app/build.gradle.kts"
+
+    - name: Create output directory
+      run: mkdir -p release_output
+
+    - name: Build Release APKs
+      run: |
+        chmod +x gradlew
+        ./gradlew assembleRelease --info --stacktrace
+
+    - name: Copy APKs and generate checksums
+      run: |
+        cp app/build/outputs/apk/release/*.apk release_output/
+        cd release_output
+        sha256sum * > SHA256SUMS.txt
+        echo "CHECKSUMS=$(cat SHA256SUMS.txt)" >> $GITHUB_ENV
+        ls -l
+
+    - name: Commit version update
+      run: |
+        git config --global user.name 'GitHub Actions Bot'
+        git config --global user.email 'actions@github.com'
+        git add app/build.gradle.kts
+        git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
+        git push
+
+    - name: Create Pre-release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.release_tag }}
+        name: "Pre-release ${{ steps.version.outputs.new_version }}"
+        body: |
+          🚧 Automated Pre-release
+          
+          Version: ${{ steps.version.outputs.new_version }}
+          Triggered by: ${{ github.event_name }}
+          Commit: ${{ github.sha }}
+          
+          **SHA256 Checksums**
+          ```
+          ${{ env.CHECKSUMS }}
+          ```
+        files: release_output/*
+        draft: false
+        prerelease: true
