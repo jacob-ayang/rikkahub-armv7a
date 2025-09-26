@@ -31,16 +31,22 @@ android {
 
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            excludes += "META-INF/INDEX.LIST"
-            excludes += "META-INF/DEPENDENCIES"
-            excludes += "META-INF/LICENSE"
-            excludes += "META-INF/LICENSE.txt"
-            excludes += "META-INF/license.txt"
-            excludes += "META-INF/NOTICE"
-            excludes += "META-INF/NOTICE.txt"
-            excludes += "META-INF/notice.txt"
-            excludes += "META-INF/*.kotlin_module"
+            excludes.add("/META-INF/{AL2.0,LGPL2.1}")
+            excludes.add("META-INF/INDEX.LIST")
+            excludes.add("META-INF/DEPENDENCIES")
+            excludes.add("META-INF/LICENSE*")
+            excludes.add("META-INF/license*")
+            excludes.add("META-INF/NOTICE*")
+            excludes.add("META-INF/notice*")
+            excludes.add("META-INF/*.kotlin_module")
+            excludes.add("META-INF/*.version")
+            excludes.add("META-INF/proguard/**")
+            excludes.add("META-INF/maven/**")
+            pickFirsts.add("META-INF/services/*")
+            merges.add("META-INF/okhttp*")
+        }
+        dex {
+            useLegacyPackaging = false
         }
     }
 

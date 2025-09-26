@@ -27,28 +27,51 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: 'gradle'
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        cache: true
         
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.android/build-cache
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/buildSrc/**/*.kt') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
         
     - name: Setup Gradle
       uses: gradle/gradle-build-action@v2
-      
-    - name: Clean build
+      with:
+        gradle-home-cache-cleanup: true
+        cache-read-only: false
+        cache-write-only: false
+        
+    - name: Clean build and validate dependencies
       run: |
         chmod +x gradlew
         ./gradlew clean
+        ./gradlew dependencies --write-verification-metadata sha256
+        ./gradlew androidDependencies
 
     - name: Build ARMv7a Release
       run: |
-        ANDROID_ABI=armeabi-v7a ./gradlew assembleRelease --info --stacktrace --warning-mode all --scan
+        ./gradlew :app:assembleRelease \
+          -Pandroid.injected.build.abi=armeabi-v7a \
+          --stacktrace \
+          --info \
+          --warning-mode all \
+          --scan \
+          -Dorg.gradle.caching=true \
+          -Dkotlin.compiler.execution.strategy=in-process \
+          -Dkotlin.incremental=false
       env:
         ANDROID_ABI: "armeabi-v7a"
-        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2"
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=true"
         
     - name: Create output directory
       run: mkdir -p v7output
