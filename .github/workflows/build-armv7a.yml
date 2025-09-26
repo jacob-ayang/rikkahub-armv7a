@@ -52,6 +52,7 @@ jobs:
         cp app/build/outputs/apk/release/rikkahub_*_armeabi-v7a-release.apk v7output/
         cd v7output
         sha256sum * > SHA256SUMS.txt
+        echo "CHECKSUMS=$(cat SHA256SUMS.txt)" >> $GITHUB_ENV
         ls -l
 
     - name: Create Release
@@ -63,9 +64,9 @@ jobs:
           ${{ github.event.inputs.release_notes }}
           
           **SHA256 Checksums**
-          \`\`\`
-          ${{ cat v7output/SHA256SUMS.txt }}
-          \`\`\`
+          ```
+          ${{ env.CHECKSUMS }}
+          ```
         files: v7output/*
         draft: false
         prerelease: false
