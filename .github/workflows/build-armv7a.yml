@@ -47,7 +47,7 @@ jobs:
       
     - name: Build ARMv7a
       run: |
-        ./gradlew assembleDebug --info --stacktrace
+        ./gradlew assembleRelease --info --stacktrace
       env:
         ANDROID_ABI: "armeabi-v7a"
         
@@ -56,13 +56,13 @@ jobs:
 
     - name: Copy APK to output directory
       run: |
-        cp app/build/outputs/apk/debug/rikkahub_*_armeabi-v7a-debug.apk v7output/
+        cp app/build/outputs/apk/release/rikkahub_*_armeabi-v7a-release.apk v7output/
         ls -l v7output
 
-    - name: Upload Debug APK
+    - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug-armv7a
+        name: app-release-armv7a
         path: v7output
         compression-level: 9
 
