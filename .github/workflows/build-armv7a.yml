@@ -1,11 +1,25 @@
-name: Build ARMv7a
+name: Build ARMv7a Release
 
 on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '发布标签 (例如: v1.0.0)'
+        required: true
+        type: string
+      release_title:
+        description: '发布标题'
+        required: true
+        type: string
+      release_notes:
+        description: '发布说明'
+        required: true
+        type: string
+      is_prerelease:
+        description: '是否为预发布版本'
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -51,3 +65,15 @@ jobs:
         name: app-debug-armv7a
         path: v7output
         compression-level: 9
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.release_tag }}
+        name: ${{ github.event.inputs.release_title }}
+        body: ${{ github.event.inputs.release_notes }}
+        draft: false
+        prerelease: ${{ github.event.inputs.is_prerelease }}
+        files: v7output/*.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
