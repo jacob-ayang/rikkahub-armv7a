@@ -23,6 +23,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 ## 🚀 Download
 
 🔗 [Download from Website](https://rikka-ai.com/download)
+
 🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
 ## ✨ Features
@@ -74,7 +75,9 @@ Technology stack documentation:
 
 ## 💖 Thanks
 
-* Thanks to [SiliconFlow](https://siliconflow.cn/) providing free models in cooperation with us
+- Thanks to [SiliconFlow](https://siliconflow.cn/) providing free models in cooperation with us.
+- Thanks to [Aihubmix](https://aihubmix.com/) for their support. The post can be thanking aihubmix for their sponsorship. We recommend using aihubmix as a one-stop shop for mainstream models worldwide.
+(OpenAI, Claude, Google Gemini, DeepSeek, Qwen, and hundreds more).
 
 ## 💰 Donate
 
