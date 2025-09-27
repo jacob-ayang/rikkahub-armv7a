@@ -1,101 +1,53 @@
-name: Build and Release ARMv7a
+name: Build ARMv7a
 
 on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag (e.g. v1.0.0-armv7)'
-        required: true
-      release_title:
-        description: 'Release title'
-        required: true
-      release_notes:
-        description: 'Release notes'
-        required: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+    - uses: actions/checkout@v3
     
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v3
       with:
         java-version: '17'
         distribution: 'temurin'
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-      with:
-        cache: true
         
-    - name: Cache Gradle Dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-          ~/.android/build-cache
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/buildSrc/**/*.kt') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
         
     - name: Setup Gradle
       uses: gradle/gradle-build-action@v2
       with:
-        gradle-home-cache-cleanup: true
-        cache-read-only: false
-        cache-write-only: false
-        
-    - name: Clean build and validate dependencies
+        cache-disabled: true
+      
+    - name: Build ARMv7a
       run: |
-        chmod +x gradlew
-        ./gradlew clean
-        ./gradlew dependencies --write-verification-metadata sha256
-        ./gradlew androidDependencies
-
-    - name: Build ARMv7a Release
-      run: |
-        ./gradlew :app:assembleRelease \
-          -Pandroid.injected.build.abi=armeabi-v7a \
-          --stacktrace \
-          --info \
-          --warning-mode all \
-          --scan \
-          -Dorg.gradle.caching=true \
-          -Dkotlin.compiler.execution.strategy=in-process \
-          -Dkotlin.incremental=false
+        ./gradlew assembleDebug --info --stacktrace
       env:
         ANDROID_ABI: "armeabi-v7a"
-        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=true"
         
     - name: Create output directory
       run: mkdir -p v7output
 
-    - name: Copy APK and generate checksum
+    - name: Copy APK to output directory
       run: |
-        cp app/build/outputs/apk/release/rikkahub_*_armeabi-v7a-release.apk v7output/
-        cd v7output
-        sha256sum * > SHA256SUMS.txt
-        echo "CHECKSUMS=$(cat SHA256SUMS.txt)" >> $GITHUB_ENV
-        ls -l
+        cp app/build/outputs/apk/debug/rikkahub_*_armeabi-v7a-debug.apk v7output/
+        ls -l v7output
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: ${{ github.event.inputs.release_tag }}
-        name: ${{ github.event.inputs.release_title }}
-        body: |
-          ${{ github.event.inputs.release_notes }}
-          
-          **SHA256 Checksums**
-          ```
-          ${{ env.CHECKSUMS }}
-          ```
-        files: v7output/*
-        draft: false
-        prerelease: false
+        name: app-debug-armv7a
+        path: v7output
+        compression-level: 9
