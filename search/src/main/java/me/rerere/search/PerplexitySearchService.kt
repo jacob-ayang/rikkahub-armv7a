@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -21,17 +22,18 @@ import me.rerere.search.SearchService.Companion.json
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-private const val TAG = "LinkUpService"
+private const val PERPLEXITY_ENDPOINT = "https://api.perplexity.ai/search"
+private const val TAG = "PerplexitySearchService"
 
-object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
-    override val name: String = "LinkUp"
+object PerplexitySearchService : SearchService<SearchServiceOptions.PerplexityOptions> {
+    override val name: String = "Perplexity"
 
     @Composable
     override fun Description() {
-        val urlHandler = LocalUriHandler.current
+        val uriHandler = LocalUriHandler.current
         TextButton(
             onClick = {
-                urlHandler.openUri("https://www.linkup.so/")
+                uriHandler.openUri("https://www.perplexity.ai/settings/api")
             }
         ) {
             Text(stringResource(R.string.click_to_get_api_key))
@@ -54,42 +56,56 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
-        serviceOptions: SearchServiceOptions.LinkUpOptions
+        serviceOptions: SearchServiceOptions.PerplexityOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
-            val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
-            val body = buildJsonObject {
-                put("q", JsonPrimitive(query))
-                put("depth", JsonPrimitive(serviceOptions.depth))
-                put("outputType", JsonPrimitive("sourcedAnswer"))
-                put("includeImages", JsonPrimitive("false"))
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Perplexity API key is required")
             }
 
+            val query = params["query"]?.jsonPrimitive?.content
+                ?: error("query is required")
+
+            val body = buildJsonObject {
+                put("query", JsonPrimitive(query))
+                put("max_results", JsonPrimitive(commonOptions.resultSize))
+                serviceOptions.maxTokensPerPage?.let {
+                    if (it > 0) {
+                        put("max_tokens_per_page", JsonPrimitive(it))
+                    }
+                }
+            }
+
+            Log.i(TAG, "search: $body")
+
             val request = Request.Builder()
-                .url("https://api.linkup.so/v1/search")
+                .url(PERPLEXITY_ENDPOINT)
                 .post(body.toString().toRequestBody())
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            Log.i(TAG, "search: $query")
-
             val response = httpClient.newCall(request).await()
             if (response.isSuccessful) {
                 val responseBody = response.body.string().let {
-                    json.decodeFromString<LinkUpSearchResponse>(it)
+                    json.decodeFromString<PerplexityResponse>(it)
                 }
+
+                val items = responseBody.results
+                    .filter { !it.title.isNullOrBlank() && !it.url.isNullOrBlank() }
+                    .take(commonOptions.resultSize)
+                    .map {
+                        SearchResultItem(
+                            title = it.title!!,
+                            url = it.url!!,
+                            text = it.snippet ?: it.text ?: ""
+                        )
+                    }
 
                 return@withContext Result.success(
                     SearchResult(
                         answer = responseBody.answer,
-                        items = responseBody.sources.take(commonOptions.resultSize).map {
-                            SearchResultItem(
-                                title = it.name,
-                                url = it.url,
-                                text = it.snippet
-                            )
-                        }
+                        items = items
                     )
                 )
             } else {
@@ -101,21 +117,22 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
     override suspend fun scrape(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
-        serviceOptions: SearchServiceOptions.LinkUpOptions
+        serviceOptions: SearchServiceOptions.PerplexityOptions
     ): Result<ScrapedResult> {
-        return Result.failure(Exception("Scraping is not supported for LinkUp"))
+        return Result.failure(Exception("Scraping is not supported for Perplexity"))
     }
 
     @Serializable
-    data class LinkUpSearchResponse(
-        val answer: String,
-        val sources: List<Source>
-    )
-
-    @Serializable
-    data class Source(
-        val name: String,
-        val url: String,
-        val snippet: String
-    )
+    private data class PerplexityResponse(
+        val answer: String? = null,
+        val results: List<ResultItem> = emptyList()
+    ) {
+        @Serializable
+        data class ResultItem(
+            val title: String? = null,
+            val url: String? = null,
+            val snippet: String? = null,
+            @SerialName("text") val text: String? = null,
+        )
+    }
 }

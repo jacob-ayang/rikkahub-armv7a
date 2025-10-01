@@ -9,8 +9,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -44,6 +42,8 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
             },
             required = listOf("query")
         )
+
+    override val scrapingParameters: InputSchema? = null
 
     override suspend fun search(
         params: JsonObject,
@@ -117,6 +117,15 @@ object SearXNGService : SearchService<SearchServiceOptions.SearXNGOptions> {
             }
         }
     }
+
+    override suspend fun scrape(
+        params: JsonObject,
+        commonOptions: SearchCommonOptions,
+        serviceOptions: SearchServiceOptions.SearXNGOptions
+    ): Result<ScrapedResult> {
+        return Result.failure(Exception("Scraping is not supported for SearXNG"))
+    }
+
 
     @Serializable
     data class SearXNGResponse(

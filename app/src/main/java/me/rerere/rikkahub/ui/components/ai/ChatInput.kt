@@ -111,7 +111,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
-import me.rerere.rikkahub.data.mcp.McpManager
+import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
@@ -121,7 +121,6 @@ import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
-import me.rerere.rikkahub.utils.GetContentWithMultiMime
 import me.rerere.rikkahub.utils.createChatFilesByContents
 import me.rerere.rikkahub.utils.deleteChatFiles
 import me.rerere.rikkahub.utils.getFileMimeType
@@ -926,7 +925,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
     val context = LocalContext.current
     val toaster = LocalToaster.current
     val pickMedia =
-        rememberLauncherForActivityResult(GetContentWithMultiMime()) { uris ->
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
             if (uris.isNotEmpty()) {
                 val allowedMimeTypes = setOf(
                     "text/plain",
@@ -965,7 +964,14 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                         fileName.endsWith(".xml", ignoreCase = true) ||
                         fileName.endsWith(".py", ignoreCase = true) ||
                         fileName.endsWith(".java", ignoreCase = true) ||
-                        fileName.endsWith(".kt", ignoreCase = true)
+                        fileName.endsWith(".kt", ignoreCase = true) ||
+                        fileName.endsWith(".ts", ignoreCase = true) ||
+                        fileName.endsWith(".tsx", ignoreCase = true) ||
+                        fileName.endsWith(".md", ignoreCase = true) ||
+                        fileName.endsWith(".markdown", ignoreCase = true) ||
+                        fileName.endsWith(".mdx", ignoreCase = true) ||
+                        fileName.endsWith(".yml", ignoreCase = true) ||
+                        fileName.endsWith(".yaml", ignoreCase = true)
 
                     if (isAllowed) {
                         val localUri = context.createChatFilesByContents(listOf(uri))[0]
@@ -995,9 +1001,7 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
             Text(stringResource(R.string.upload_file))
         }
     ) {
-        pickMedia.launch(
-            listOf("*/*")
-        )
+        pickMedia.launch(arrayOf("*/*"))
     }
 }
 

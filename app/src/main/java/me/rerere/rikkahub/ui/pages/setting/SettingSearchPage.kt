@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,9 +23,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.GripHorizontal
@@ -306,7 +308,21 @@ private fun SearchProviderCard(
                     }
                 }
 
+                is SearchServiceOptions.PerplexityOptions -> {
+                    PerplexityOptions(options as SearchServiceOptions.PerplexityOptions) {
+                        options = it
+                        onUpdateService(options)
+                    }
+                }
+
                 is SearchServiceOptions.BingLocalOptions -> {}
+
+                is SearchServiceOptions.FirecrawlOptions -> {
+                    FirecrawlOptions(options as SearchServiceOptions.FirecrawlOptions) {
+                        options = it
+                        onUpdateService(options)
+                    }
+                }
             }
 
             ProvideTextStyle(MaterialTheme.typography.labelMedium) {
@@ -681,6 +697,73 @@ private fun MetasoOptions(
 private fun OllamaOptions(
     options: SearchServiceOptions.OllamaOptions,
     onUpdateOptions: (SearchServiceOptions.OllamaOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun PerplexityOptions(
+    options: SearchServiceOptions.PerplexityOptions,
+    onUpdateOptions: (SearchServiceOptions.PerplexityOptions) -> Unit
+) {
+    FormItem(
+        label = {
+            Text("API Key")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = {
+                onUpdateOptions(
+                    options.copy(
+                        apiKey = it
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(
+        label = {
+            Text("Max Tokens / Page")
+        }
+    ) {
+        OutlinedTextField(
+            value = options.maxTokensPerPage?.takeIf { it > 0 }?.toString() ?: "",
+            onValueChange = { value ->
+                onUpdateOptions(
+                    options.copy(
+                        maxTokensPerPage = value.toIntOrNull()
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        )
+    }
+}
+
+@Composable
+private fun FirecrawlOptions(
+    options: SearchServiceOptions.FirecrawlOptions,
+    onUpdateOptions: (SearchServiceOptions.FirecrawlOptions) -> Unit
 ) {
     FormItem(
         label = {
