@@ -1,6 +1,5 @@
 package me.rerere.search
 
-import android.util.Log
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -10,7 +9,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -21,17 +19,15 @@ import me.rerere.search.SearchService.Companion.json
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-private const val TAG = "LinkUpService"
-
-object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
-    override val name: String = "LinkUp"
+object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
+    override val name: String = "Jina"
 
     @Composable
     override fun Description() {
         val urlHandler = LocalUriHandler.current
         TextButton(
             onClick = {
-                urlHandler.openUri("https://www.linkup.so/")
+                urlHandler.openUri("https://jina.ai/")
             }
         ) {
             Text(stringResource(R.string.click_to_get_api_key))
@@ -63,46 +59,42 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
     override suspend fun search(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
-        serviceOptions: SearchServiceOptions.LinkUpOptions
+        serviceOptions: SearchServiceOptions.JinaOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
+
             val body = buildJsonObject {
-                put("q", JsonPrimitive(query))
-                put("depth", JsonPrimitive(serviceOptions.depth))
-                put("outputType", JsonPrimitive("sourcedAnswer"))
-                put("includeImages", JsonPrimitive("false"))
+                put("q", query)
             }
 
             val request = Request.Builder()
-                .url("https://api.linkup.so/v1/search")
+                .url("https://s.jina.ai/")
                 .post(body.toString().toRequestBody())
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .addHeader("Accept", "application/json")
                 .addHeader("Content-Type", "application/json")
                 .build()
 
-            Log.i(TAG, "search: $query")
-
             val response = httpClient.newCall(request).await()
             if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<LinkUpSearchResponse>(it)
+                val responseData = response.body.string().let {
+                    json.decodeFromString<JinaSearchResponse>(it)
                 }
 
                 return@withContext Result.success(
                     SearchResult(
-                        answer = responseBody.answer,
-                        items = responseBody.sources.take(commonOptions.resultSize).map {
+                        items = responseData.data.take(commonOptions.resultSize).map {
                             SearchResultItem(
-                                title = it.name,
+                                title = it.title,
                                 url = it.url,
-                                text = it.snippet
+                                text = it.description
                             )
                         }
                     )
                 )
             } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
+                error("response failed #${response.code}")
             }
         }
     }
@@ -110,61 +102,82 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
     override suspend fun scrape(
         params: JsonObject,
         commonOptions: SearchCommonOptions,
-        serviceOptions: SearchServiceOptions.LinkUpOptions
+        serviceOptions: SearchServiceOptions.JinaOptions
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
-            val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
+            val url = params["url"]?.jsonPrimitive?.content ?: error("urls is required")
+
             val body = buildJsonObject {
-                put("url", JsonPrimitive(url))
-                put("includeRawHtml", JsonPrimitive(false))
-                put("renderJs", JsonPrimitive(false))
-                put("extractImages", JsonPrimitive(false))
+                put("url", url)
             }
 
             val request = Request.Builder()
-                .url("https://api.linkup.so/v1/fetch")
+                .url("https://r.jina.ai/")
                 .post(body.toString().toRequestBody())
                 .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .addHeader("Accept", "application/json")
                 .addHeader("Content-Type", "application/json")
+                .addHeader("X-Return-Format", "markdown")
                 .build()
 
             val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<LinkUpFetchResponse>(it)
-                }
+            if (!response.isSuccessful) {
+                error("response failed for url $url #${response.code}")
+            }
+            val responseData = response.body.string().let {
+                json.decodeFromString<JinaScrapeResponse>(it)
+            }
 
-                return@withContext Result.success(
-                    ScrapedResult(
-                        urls = listOf(
-                            ScrapedResultUrl(
-                                url = url,
-                                content = responseBody.markdown
-                            )
+            ScrapedResult(
+                urls = listOf(
+                    ScrapedResultUrl(
+                        url = responseData.data.url,
+                        content = responseData.data.content,
+                        metadata = ScrapedResultMetadata(
+                            title = responseData.data.title,
+                            description = responseData.data.description
                         )
                     )
                 )
-            } else {
-                error("response failed #${response.code}: ${response.body?.string()}")
-            }
+            )
         }
     }
 
     @Serializable
-    data class LinkUpSearchResponse(
-        val answer: String,
-        val sources: List<Source>
+    data class JinaSearchResponse(
+        val code: Int,
+        val status: Int,
+        val data: List<JinaSearchResultItem>
     )
 
     @Serializable
-    data class Source(
-        val name: String,
+    data class JinaSearchResultItem(
+        val title: String,
         val url: String,
-        val snippet: String
+        val description: String,
+        val content: String = "",
+        val usage: JinaUsage? = null
     )
 
     @Serializable
-    data class LinkUpFetchResponse(
-        val markdown: String
+    data class JinaUsage(
+        val tokens: Int
+    )
+
+    @Serializable
+    data class JinaScrapeResponse(
+        val code: Int,
+        val status: Int,
+        val data: JinaScrapeData
+    )
+
+    @Serializable
+    data class JinaScrapeData(
+        val title: String,
+        val description: String = "",
+        val url: String,
+        val content: String,
+        val publishedTime: String? = null,
+        val usage: JinaUsage? = null
     )
 }

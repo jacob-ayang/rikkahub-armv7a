@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">創建了記憶</string>
   <string name="chat_message_tool_delete_memory">刪除了記憶</string>
   <string name="chat_message_tool_edit_memory">更新了記憶</string>
+  <string name="chat_message_tool_scrape_prefix">爬取網站：%1$s</string>
+  <string name="chat_message_tool_scrape_web">爬取網頁</string>
   <string name="chat_message_tool_search_prefix">搜尋: %1$s</string>
   <string name="chat_message_tool_search_results_count">共 %1$d 條結果</string>
   <string name="chat_message_tool_search_web">搜尋網頁: %1$s</string>
@@ -341,6 +343,8 @@
   <string name="reasoning_set_budget">設置推理預算 (%1$d tokens)</string>
   <string name="regenerate">重新生成</string>
   <string name="render_with_webview">網頁視圖渲染</string>
+  <string name="search_ability_scrape">爬取</string>
+  <string name="search_ability_search">搜尋</string>
   <string name="search_picker_title">搜尋設定</string>
   <string name="select_and_copy">選擇複製</string>
   <string name="send">發送</string>
@@ -543,6 +547,7 @@
   <string name="setting_provider_page_save_success">保存成功</string>
   <string name="setting_provider_page_scan_error">錯誤: %s</string>
   <string name="setting_provider_page_scan_qr_code">掃描二維碼</string>
+  <string name="setting_provider_page_search_providers">搜尋提供者</string>
   <string name="setting_provider_page_select_from_gallery">從相簿選擇</string>
   <string name="setting_provider_page_service_account_email">服務帳戶郵箱</string>
   <string name="setting_provider_page_share">分享</string>

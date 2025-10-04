@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">Создана заметка</string>
   <string name="chat_message_tool_delete_memory">Удалённая память</string>
   <string name="chat_message_tool_edit_memory">Обновлена память</string>
+  <string name="chat_message_tool_scrape_prefix">Собрать данные с сайта: %1$s</string>
+  <string name="chat_message_tool_scrape_web">Собрать данные со страницы</string>
   <string name="chat_message_tool_search_prefix">Поиск: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d результатов</string>
   <string name="chat_message_tool_search_web">Поиск в интернете: %1$s</string>
@@ -341,6 +343,8 @@
   <string name="reasoning_set_budget">Установить лимит рассуждений (%1$d токенов)</string>
   <string name="regenerate">Сгенерировать заново</string>
   <string name="render_with_webview">Отображать в WebView</string>
+  <string name="search_ability_scrape">Собрать</string>
+  <string name="search_ability_search">Поиск</string>
   <string name="search_picker_title">Поиск настроек</string>
   <string name="select_and_copy">Выделить и скопировать</string>
   <string name="send">Отправить</string>
@@ -543,6 +547,7 @@
   <string name="setting_provider_page_save_success">Сохранено успешно</string>
   <string name="setting_provider_page_scan_error">Ошибка: %s</string>
   <string name="setting_provider_page_scan_qr_code">Сканировать QR-код</string>
+  <string name="setting_provider_page_search_providers">Поиск поставщиков</string>
   <string name="setting_provider_page_select_from_gallery">Выбрать из галереи</string>
   <string name="setting_provider_page_service_account_email">Электронная почта служебной учётной записи</string>
   <string name="setting_provider_page_share">Поделиться</string>

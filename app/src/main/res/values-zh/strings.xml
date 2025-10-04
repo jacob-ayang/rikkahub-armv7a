@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">创建了记忆</string>
   <string name="chat_message_tool_delete_memory">删除了记忆</string>
   <string name="chat_message_tool_edit_memory">更新了记忆</string>
+  <string name="chat_message_tool_scrape_prefix">抓取网站：%1$s</string>
+  <string name="chat_message_tool_scrape_web">抓取网页</string>
   <string name="chat_message_tool_search_prefix">搜索: %1$s</string>
   <string name="chat_message_tool_search_results_count">共 %1$d 条结果</string>
   <string name="chat_message_tool_search_web">搜索网页: %1$s</string>
@@ -341,6 +343,8 @@
   <string name="reasoning_set_budget">设置推理预算 (%1$d tokens)</string>
   <string name="regenerate">重新生成</string>
   <string name="render_with_webview">网页视图渲染</string>
+  <string name="search_ability_scrape">抓取</string>
+  <string name="search_ability_search">搜索</string>
   <string name="search_picker_title">搜索设置</string>
   <string name="select_and_copy">选择复制</string>
   <string name="send">发送</string>
@@ -543,6 +547,7 @@
   <string name="setting_provider_page_save_success">保存成功</string>
   <string name="setting_provider_page_scan_error">错误: %s</string>
   <string name="setting_provider_page_scan_qr_code">扫描二维码</string>
+  <string name="setting_provider_page_search_providers">搜索提供商</string>
   <string name="setting_provider_page_select_from_gallery">从相册选择</string>
   <string name="setting_provider_page_service_account_email">服务账户邮箱</string>
   <string name="setting_provider_page_share">分享</string>

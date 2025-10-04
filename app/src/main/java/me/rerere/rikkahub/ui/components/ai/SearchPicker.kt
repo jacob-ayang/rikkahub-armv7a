@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,8 +50,11 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.Tag
+import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.pages.setting.SearchAbilityTagLine
 import me.rerere.search.SearchService
 import me.rerere.search.SearchServiceOptions
 import org.koin.compose.koinInject
@@ -85,9 +89,9 @@ fun SearchPickerButton(
                 contentAlignment = Alignment.Center
             ) {
                 if (enableSearch && currentService != null) {
-                    Icon(
-                        imageVector = Lucide.Earth,
-                        contentDescription = stringResource(R.string.use_web_search),
+                    AutoAIIcon(
+                        name = SearchServiceOptions.TYPES[currentService::class] ?: "Search",
+                        color = Color.Transparent
                     )
                 } else {
                     Icon(
@@ -262,7 +266,7 @@ private fun AppSearchSettings(
                 ) {
                     AutoAIIcon(
                         name = SearchServiceOptions.TYPES[service::class] ?: "Search",
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                     Column(
                         modifier = Modifier.weight(1f),
@@ -271,10 +275,9 @@ private fun AppSearchSettings(
                             text = SearchServiceOptions.TYPES[service::class] ?: "Unknown",
                             style = MaterialTheme.typography.titleMedium,
                         )
-                        Text(
-                            text = SearchService.getService(service).name,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LocalContentColor.current.copy(alpha = 0.8f)
+                        SearchAbilityTagLine(
+                            options = service,
+                            modifier = Modifier
                         )
                     }
                 }

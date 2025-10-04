@@ -13,6 +13,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Response
 import okhttp3.internal.closeQuietly
 import okio.IOException
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
 import kotlin.uuid.Uuid
 
@@ -53,6 +54,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.OllamaOptions -> OllamaSearchService
                 is SearchServiceOptions.PerplexityOptions -> PerplexitySearchService
                 is SearchServiceOptions.FirecrawlOptions -> FirecrawlSearchService
+                is SearchServiceOptions.JinaOptions -> JinaSearchService
             } as SearchService<T>
         }
 
@@ -61,6 +63,7 @@ interface SearchService<T : SearchServiceOptions> {
                 .retryOnConnectionFailure(true)
                 .followRedirects(true)
                 .followSslRedirects(true)
+                .readTimeout(30, TimeUnit.SECONDS)
                 .build()
         }
 
@@ -129,6 +132,7 @@ sealed class SearchServiceOptions {
             OllamaOptions::class to "Ollama",
             PerplexityOptions::class to "Perplexity",
             FirecrawlOptions::class to "Firecrawl",
+            JinaOptions::class to "Jina",
         )
     }
 
@@ -211,6 +215,13 @@ sealed class SearchServiceOptions {
     @Serializable
     @SerialName("firecrawl")
     data class FirecrawlOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("jina")
+    data class JinaOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
     ) : SearchServiceOptions()

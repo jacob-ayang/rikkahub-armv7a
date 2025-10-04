@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">記憶を作成しました</string>
   <string name="chat_message_tool_delete_memory">記憶を削除しました</string>
   <string name="chat_message_tool_edit_memory">記憶を更新しました</string>
+  <string name="chat_message_tool_scrape_prefix">ウェブサイトをスクレイピング: %1$s</string>
+  <string name="chat_message_tool_scrape_web">ウェブページを取得</string>
   <string name="chat_message_tool_search_prefix">検索: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d件の結果</string>
   <string name="chat_message_tool_search_web">ウェブ検索: %1$s</string>
@@ -341,6 +343,8 @@
   <string name="reasoning_set_budget">推論予算を設定 (%1$d トークン)</string>
   <string name="regenerate">再生成</string>
   <string name="render_with_webview">WebViewで表示</string>
+  <string name="search_ability_scrape">スクレイピング</string>
+  <string name="search_ability_search">検索</string>
   <string name="search_picker_title">検索設定</string>
   <string name="select_and_copy">選択コピー</string>
   <string name="send">送信</string>
@@ -543,6 +547,7 @@
   <string name="setting_provider_page_save_success">保存に成功しました</string>
   <string name="setting_provider_page_scan_error">エラー: %s</string>
   <string name="setting_provider_page_scan_qr_code">QRコードをスキャン</string>
+  <string name="setting_provider_page_search_providers">プロバイダーを検索</string>
   <string name="setting_provider_page_select_from_gallery">ギャラリーから選択</string>
   <string name="setting_provider_page_service_account_email">サービスアカウントメール</string>
   <string name="setting_provider_page_share">共有</string>

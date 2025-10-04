@@ -179,6 +179,8 @@
   <string name="chat_message_tool_create_memory">기억 생성됨</string>
   <string name="chat_message_tool_delete_memory">기억 삭제됨</string>
   <string name="chat_message_tool_edit_memory">기억 업데이트됨</string>
+  <string name="chat_message_tool_scrape_prefix">웹사이트 긁어오기: %1$s</string>
+  <string name="chat_message_tool_scrape_web">웹 페이지 긁어오기</string>
   <string name="chat_message_tool_search_prefix">검색: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d개 결과</string>
   <string name="chat_message_tool_search_web">웹 검색: %1$s</string>
@@ -341,6 +343,8 @@
   <string name="reasoning_set_budget">사고 예산 설정(%1$d 토큰)</string>
   <string name="regenerate">다시 생성</string>
   <string name="render_with_webview">WebView로 렌더링</string>
+  <string name="search_ability_scrape">스크래핑</string>
+  <string name="search_ability_search">검색</string>
   <string name="search_picker_title">검색 설정</string>
   <string name="select_and_copy">선택 및 복사</string>
   <string name="send">전송</string>
@@ -543,6 +547,7 @@
   <string name="setting_provider_page_save_success">저장 성공</string>
   <string name="setting_provider_page_scan_error">오류: %s</string>
   <string name="setting_provider_page_scan_qr_code">QR 코드 스캔</string>
+  <string name="setting_provider_page_search_providers">공급자 검색</string>
   <string name="setting_provider_page_select_from_gallery">갤러리에서 선택</string>
   <string name="setting_provider_page_service_account_email">서비스 계정 이메일</string>
   <string name="setting_provider_page_share">공유</string>

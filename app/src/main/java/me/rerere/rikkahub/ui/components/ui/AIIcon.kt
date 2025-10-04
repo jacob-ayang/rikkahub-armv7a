@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -25,7 +26,8 @@ private fun AIIcon(
     path: String,
     name: String,
     modifier: Modifier = Modifier,
-    loading: Boolean = false
+    loading: Boolean = false,
+    color: Color = MaterialTheme.colorScheme.secondaryContainer,
 ) {
     val contentColor = LocalContentColor.current
     val context = LocalContext.current
@@ -44,7 +46,7 @@ private fun AIIcon(
     Surface(
         modifier = modifier.size(24.dp),
         shape = rememberAvatarShape(loading),
-        color = MaterialTheme.colorScheme.secondaryContainer,
+        color = color,
     ) {
         AsyncImage(
             model = model,
@@ -59,16 +61,18 @@ fun AutoAIIcon(
     name: String,
     modifier: Modifier = Modifier,
     loading: Boolean = false,
+    color: Color = MaterialTheme.colorScheme.secondaryContainer,
 ) {
     val path = remember(name) { computeAIIconByName(name) } ?: run {
-        TextAvatar(text = name, modifier = modifier, loading = loading)
+        TextAvatar(text = name, modifier = modifier, loading = loading, color = color)
         return
     }
     AIIcon(
         path = path,
         name = name,
         modifier = modifier,
-        loading = loading
+        loading = loading,
+        color = color,
     )
 }
 
@@ -133,6 +137,9 @@ private fun computeAIIconByName(name: String): String? {
         PATTERN_SEARCH_EXA.containsMatchIn(lowerName) -> "exa.png"
         PATTERN_SEARCH_BRAVE.containsMatchIn(lowerName) -> "brave.svg"
         PATTERN_SEARCH_METASO.containsMatchIn(lowerName) -> "metaso.svg"
+        PATTERN_SEARCH_FIRECRAWL.containsMatchIn(lowerName) -> "firecrawl.svg"
+        PATTERN_SEARCH_JINA.containsMatchIn(lowerName) -> "jina.svg"
+
         else -> null
     }
 
@@ -190,6 +197,8 @@ private val PATTERN_SEARCH_TAVILY = Regex("tavily")
 private val PATTERN_SEARCH_EXA = Regex("exa")
 private val PATTERN_SEARCH_BRAVE = Regex("brave")
 private val PATTERN_SEARCH_METASO = Regex("metaso|秘塔")
+private val PATTERN_SEARCH_FIRECRAWL = Regex("firecrawl")
+private val PATTERN_SEARCH_JINA = Regex("jina")
 
 @Composable
 fun SiliconFlowPowerByIcon(modifier: Modifier = Modifier) {
