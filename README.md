@@ -6,7 +6,7 @@
   [![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
 
 A native Android LLM chat client that supports switching between different providers for
-conversations 🤖💬
+conversations 🤖💬 
 
 Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
 
@@ -22,7 +22,7 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 
 ## 🚀 Download
 
-🔗 [Download from Website](https://rikka-ai.com/download)
+🔗 [Download from Website]((https://github.com/jacob-ayang/rikkahub-armv7a/releases))
 
 🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
