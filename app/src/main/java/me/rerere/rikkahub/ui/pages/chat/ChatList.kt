@@ -1,10 +1,19 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
@@ -34,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
@@ -50,8 +61,14 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
 import com.composables.icons.lucide.Check
@@ -61,6 +78,7 @@ import com.composables.icons.lucide.ChevronsDown
 import com.composables.icons.lucide.ChevronsUp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MousePointer2
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.X
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -89,6 +107,7 @@ fun ChatList(
     conversation: Conversation,
     state: LazyListState,
     loading: Boolean,
+    previewMode: Boolean,
     settings: Settings,
     onRegenerate: (UIMessage) -> Unit = {},
     onEdit: (UIMessage) -> Unit = {},
@@ -98,6 +117,62 @@ fun ChatList(
     onClickSuggestion: (String) -> Unit = {},
     onTranslate: ((UIMessage, java.util.Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
+    onJumpToMessage: (Int) -> Unit = {},
+) {
+    SharedTransitionLayout {
+        AnimatedContent(
+            targetState = previewMode,
+            label = "ChatListMode",
+            transitionSpec = {
+                (fadeIn() + scaleIn(initialScale = 0.8f) togetherWith fadeOut() + scaleOut(targetScale = 0.8f))
+            }
+        ) { target ->
+            if (target) {
+                ChatListPreview(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    settings = settings,
+                    onJumpToMessage = onJumpToMessage,
+                    animatedVisibilityScope = this@AnimatedContent,
+                )
+            } else {
+                ChatListNormal(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    state = state,
+                    loading = loading,
+                    settings = settings,
+                    onRegenerate = onRegenerate,
+                    onEdit = onEdit,
+                    onForkMessage = onForkMessage,
+                    onDelete = onDelete,
+                    onUpdateMessage = onUpdateMessage,
+                    onClickSuggestion = onClickSuggestion,
+                    onTranslate = onTranslate,
+                    onClearTranslation = onClearTranslation,
+                    animatedVisibilityScope = this@AnimatedContent,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharedTransitionScope.ChatListNormal(
+    innerPadding: PaddingValues,
+    conversation: Conversation,
+    state: LazyListState,
+    loading: Boolean,
+    settings: Settings,
+    onRegenerate: (UIMessage) -> Unit,
+    onEdit: (UIMessage) -> Unit,
+    onForkMessage: (UIMessage) -> Unit,
+    onDelete: (UIMessage) -> Unit,
+    onUpdateMessage: (MessageNode) -> Unit,
+    onClickSuggestion: (String) -> Unit,
+    onTranslate: ((UIMessage, java.util.Locale) -> Unit)?,
+    onClearTranslation: (UIMessage) -> Unit,
+    animatedVisibilityScope: AnimatedVisibilityScope,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -155,6 +230,10 @@ fun ChatList(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "conversation_list"),
+                    animatedVisibilityScope = animatedVisibilityScope
+                )
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
@@ -341,6 +420,191 @@ fun ChatList(
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * 提取包含搜索词的文本片段，确保匹配词在开头可见
+ */
+private fun extractMatchingSnippet(
+    text: String,
+    query: String
+): String {
+    if (query.isBlank()) {
+        return text
+    }
+
+    val matchIndex = text.indexOf(query, ignoreCase = true)
+    if (matchIndex == -1) {
+        return text
+    }
+
+    // 直接从匹配词开始显示，确保匹配词在最前面
+    val snippet = text.substring(matchIndex)
+
+    // 只在前面有内容时添加省略号
+    return if (matchIndex > 0) {
+        "...$snippet"
+    } else {
+        snippet
+    }
+}
+
+private fun buildHighlightedText(
+    text: String,
+    query: String,
+    highlightColor: Color
+): AnnotatedString {
+    if (query.isBlank()) {
+        return AnnotatedString(text)
+    }
+
+    return buildAnnotatedString {
+        var startIndex = 0
+        var index = text.indexOf(query, startIndex, ignoreCase = true)
+
+        while (index >= 0) {
+            // 添加高亮前的文本
+            append(text.substring(startIndex, index))
+
+            // 添加高亮文本
+            withStyle(
+                style = SpanStyle(
+                    background = highlightColor,
+                    color = Color.Black
+                )
+            ) {
+                append(text.substring(index, index + query.length))
+            }
+
+            startIndex = index + query.length
+            index = text.indexOf(query, startIndex, ignoreCase = true)
+        }
+
+        // 添加剩余文本
+        if (startIndex < text.length) {
+            append(text.substring(startIndex))
+        }
+    }
+}
+
+@Composable
+private fun SharedTransitionScope.ChatListPreview(
+    innerPadding: PaddingValues,
+    conversation: Conversation,
+    settings: Settings,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    onJumpToMessage: (Int) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+
+    // 过滤消息
+    val filteredMessages = remember(conversation.messageNodes, searchQuery) {
+        if (searchQuery.isBlank()) {
+            conversation.messageNodes
+        } else {
+            conversation.messageNodes.filterIndexed { index, node ->
+                node.currentMessage.toText().contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .padding(innerPadding)
+            .fillMaxSize(),
+    ) {
+        // 搜索框
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text(stringResource(R.string.history_page_search)) },
+            leadingIcon = {
+                Icon(
+                    imageVector = Lucide.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(
+                            imageVector = Lucide.X,
+                            contentDescription = "Clear",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            },
+            singleLine = true,
+            shape = CircleShape,
+            maxLines = 1,
+        )
+
+        // 消息预览
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "conversation_list"),
+                    animatedVisibilityScope = animatedVisibilityScope
+                )
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            itemsIndexed(
+                items = filteredMessages,
+                key = { index, item -> item.id },
+            ) { _, node ->
+                val message = node.currentMessage
+                val isUser = message.role == me.rerere.ai.core.MessageRole.USER
+                val originalIndex = conversation.messageNodes.indexOf(node)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+                ) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clickable {
+                                    onJumpToMessage(originalIndex)
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
+                            val highlightedText = remember(searchQuery, message) {
+                                val fullText = message.toText().trim().ifBlank { "[...]" }
+                                val messageText = extractMatchingSnippet(
+                                    text = fullText,
+                                    query = searchQuery
+                                )
+                                buildHighlightedText(
+                                    text = messageText,
+                                    query = searchQuery,
+                                    highlightColor = highlightColor
+                                )
+                            }
+                            Text(
+                                text = highlightedText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

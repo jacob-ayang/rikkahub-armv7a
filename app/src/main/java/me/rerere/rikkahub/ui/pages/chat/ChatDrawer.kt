@@ -41,10 +41,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Settings2
+import com.composables.icons.lucide.Sparkles
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -84,12 +86,14 @@ fun ChatDrawerContent(
     vm: ChatVM,
     settings: Settings,
     current: Conversation,
-    conversations: List<Conversation>,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
+
+    val conversations = vm.conversations.collectAsLazyPagingItems()
+    val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
 
     val conversationJobs by vm.conversationJobs.collectAsStateWithLifecycle(
         initialValue = emptyMap(),
@@ -121,7 +125,7 @@ fun ChatDrawerContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -178,6 +182,8 @@ fun ChatDrawerContent(
                 current = current,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { vm.updateSearchQuery(it) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -220,6 +226,19 @@ fun ChatDrawerContent(
                     val currentAssistantId = settings.assistantId
                     navController.navigate(Screen.AssistantDetail(id = currentAssistantId.toString()))
                 }
+            )
+
+            NavigationDrawerItem(
+                icon = {
+                    Icon(Lucide.Sparkles, "Menu")
+                },
+                label = {
+                    Text(stringResource(R.string.menu))
+                },
+                onClick = {
+                    navController.navigate(Screen.Menu)
+                },
+                selected = false
             )
 
             NavigationDrawerItem(

@@ -207,6 +207,7 @@
   <string name="chat_page_new_message">Новое сообщение</string>
   <string name="chat_page_nickname_placeholder">Введите никнейм</string>
   <string name="chat_page_no_conversations">Нет бесед</string>
+  <string name="chat_page_recent">Недавние</string>
   <string name="chat_page_regenerate_title">Сгенерировать заголовок заново</string>
   <string name="chat_page_save">Сохранить</string>
   <string name="chat_page_scroll_to_bottom">Прокрутить вниз</string>
@@ -284,6 +285,7 @@
   <string name="language_traditional_chinese">🇨🇳 繁體中文</string>
   <string name="mcp_picker_syncing">Синхронизация MCP-серверов…</string>
   <string name="mcp_picker_title">Серверы MCP</string>
+  <string name="menu">Меню</string>
   <string name="menu_page_afternoon_greeting">Добрый день👋</string>
   <string name="menu_page_ai_translator">Переводчик ИИ</string>
   <string name="menu_page_evening_greeting">Добрый вечер👋</string>
