@@ -289,6 +289,20 @@ private fun ChatPageContent(
                         }
                         inputState.clearInput()
                     },
+                    onLongSendClick = {
+                        if (inputState.isEditing()) {
+                            vm.handleMessageEdit(
+                                parts = inputState.getContents(),
+                                messageId = inputState.editingMessage!!,
+                            )
+                        } else {
+                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
+                            scope.launch {
+                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                            }
+                        }
+                        inputState.clearInput()
+                    },
                     onUpdateChatModel = {
                         vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
                     },
