@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,7 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,9 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.composables.icons.lucide.Drama
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
-import com.composables.icons.lucide.Settings2
+import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Sparkles
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -45,6 +46,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.Greeting
+import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import me.rerere.rikkahub.ui.hooks.EditStateContent
@@ -206,10 +208,22 @@ fun ChatDrawerContent(
             )
 
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
             ) {
+                DrawerAction(
+                    icon = {
+                        Icon(imageVector = Lucide.Drama, contentDescription = stringResource(R.string.assistant_page_title))
+                    },
+                    label = {
+                        Text(stringResource(R.string.assistant_page_title))
+                    },
+                    onClick = {
+                        navController.navigate(Screen.Assistant)
+                    },
+                )
+
                 DrawerAction(
                     icon = {
                         Icon(Lucide.Sparkles, "Menu")
@@ -220,18 +234,18 @@ fun ChatDrawerContent(
                     onClick = {
                         navController.navigate(Screen.Menu)
                     },
-                    modifier = Modifier.weight(1f)
                 )
+
+                Spacer(Modifier.weight(1f))
 
                 DrawerAction(
                     icon = {
-                        Icon(Lucide.Settings2, null)
+                        Icon(Lucide.Settings, null)
                     },
                     label = { Text(stringResource(R.string.settings)) },
                     onClick = {
                         navController.navigate(Screen.Setting)
                     },
-                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -287,23 +301,22 @@ private fun DrawerAction(
     Surface(
         onClick = onClick,
         modifier = modifier,
-        color = Color.Transparent,
+        color = MaterialTheme.colorScheme.primaryContainer,
         shape = CircleShape,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround,
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 4.dp)
-                .fillMaxWidth()
+        Tooltip(
+            tooltip = {
+               label()
+            }
         ) {
             Box(
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier
+                    .padding(10.dp)
+                    .size(20.dp),
             ) {
                 icon()
             }
-            label()
         }
     }
 }

@@ -22,6 +22,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ImageGenerationParams
@@ -33,6 +34,7 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.ImageGenerationResult
@@ -377,7 +379,18 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                             }
                         }
 
-                        else -> put("thinkingBudget", params.thinkingBudget)
+                        else -> {
+                            if(ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                                when(val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
+                                    ReasoningLevel.HIGH -> put("thinkingLevel", "high")
+                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
+                                    ReasoningLevel.LOW -> put("thinkingLevel", "low")
+                                    else -> error("Unknown reasoning level: $level")
+                                }
+                            } else {
+                                put("thinkingBudget", params.thinkingBudget)
+                            }
+                        }
                     }
                 })
             }
@@ -535,7 +548,10 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                 UIMessagePart.ToolCall(
                     toolCallId = "",
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
-                    arguments = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"])
+                    arguments = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
+                    metadata = buildJsonObject {
+                        put("thoughtSignature", jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull)
+                    }
                 )
             }
 
@@ -608,6 +624,9 @@ class GoogleProvider(private val client: OkHttpClient) : Provider<ProviderSettin
                                                 put("name", part.toolName)
                                                 put("args", json.parseToJsonElement(part.arguments))
                                             })
+                                            part.metadata?.get("thoughtSignature")?.let {
+                                                put("thoughtSignature", it)
+                                            }
                                         })
                                     }
 

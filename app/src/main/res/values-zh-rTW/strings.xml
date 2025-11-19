@@ -116,6 +116,7 @@
   <string name="assistant_page_use_assistant_avatar_desc">在聊天中使用助手頭像和名字而不是模型頭像和名字</string>
   <string name="assistant_picker_expand">展開</string>
   <string name="assistant_picker_selected">已選擇</string>
+  <string name="audio">音訊</string>
   <string name="avatar_cancel">取消</string>
   <string name="avatar_change_avatar">更換頭像</string>
   <string name="avatar_input_url">輸入連結</string>
@@ -370,6 +371,8 @@
   <string name="setting_display_page_enable_message_generation_haptic_effect_title">訊息生成觸覺回饋</string>
   <string name="setting_display_page_font_size_preview">這是一個**示例**的聊天文本</string>
   <string name="setting_display_page_font_size_title">聊天字體大小</string>
+  <string name="setting_display_page_message_jumper_position_desc">將訊息跳轉按鈕移至左側</string>
+  <string name="setting_display_page_message_jumper_position_title">訊息跳轉位置</string>
   <string name="setting_display_page_notification_message_generated">在訊息產生後啟用通知</string>
   <string name="setting_display_page_notification_message_generated_desc">當應用程式不在前景時，若產生新訊息則顯示通知</string>
   <string name="setting_display_page_show_message_jumper_desc">在捲動聊天列表時，在右側顯示快速跳轉按鈕</string>
@@ -660,6 +663,7 @@
   <string name="upload_file">上傳檔案</string>
   <string name="use_web_search">網路搜尋</string>
   <string name="user_default_name">用戶</string>
+  <string name="video">影片</string>
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="web_search_enabled">已啟用網頁搜尋</string>
 </resources>
