@@ -56,12 +56,14 @@ data class UIMessage(
                                 if (part is UIMessagePart.Image) {
                                     UIMessagePart.Image(
                                         url = existingImagePart.url + deltaPart.url,
+                                        metadata = deltaPart.metadata,
                                     )
                                 } else part
                             }
                         } else {
                             acc + UIMessagePart.Image(
                                 url = "data:image/png;base64,${deltaPart.url}",
+                                metadata = deltaPart.metadata,
                             )
                         }
                     }
@@ -177,6 +179,10 @@ data class UIMessage(
         return parts.any {
             it is P
         }
+    }
+
+    fun hasBase64Part(): Boolean = parts.any {
+        it is UIMessagePart.Image && it.url.startsWith("data:")
     }
 
     operator fun plus(chunk: MessageChunk): UIMessage {
