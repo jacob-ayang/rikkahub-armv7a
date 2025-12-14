@@ -917,19 +917,24 @@ private fun AddModelButton(
             onAllModelSelected = {
                 onUpdateProvider(
                     parentProvider.copyProvider(
-                    models = models + it.map { model ->
-                        model.copy(
-                            inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId),
-                            outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId),
-                            abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
-                        )
-                    }
-                ))
+                        models = parentProvider.models + it.filter { model ->
+                            parentProvider.models.none { existing -> existing.modelId == model.modelId }
+                        }.map { model ->
+                            model.copy(
+                                inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId),
+                                outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId),
+                                abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
+                            )
+                        }
+                    )
+                )
             },
-            onAllModelDeselected = {
+            onAllModelDeselected = { filteredModels ->
                 onUpdateProvider(
                     parentProvider.copyProvider(
-                        models = emptyList()
+                        models = parentProvider.models.filter { model ->
+                            filteredModels.none { filtered -> filtered.modelId == model.modelId }
+                        }
                     )
                 )
             }
@@ -1042,7 +1047,7 @@ private fun ModelPicker(
     onModelSelected: (Model) -> Unit,
     onModelDeselected: (Model) -> Unit,
     onAllModelSelected: (List<Model>) -> Unit,
-    onAllModelDeselected: () -> Unit
+    onAllModelDeselected: (List<Model>) -> Unit
 ) {
     var showModal by remember { mutableStateOf(false) }
     if (showModal) {
@@ -1094,7 +1099,7 @@ private fun ModelPicker(
                             if (unselectedCount > 0) {
                                 onAllModelSelected(filteredModels)
                             } else {
-                                onAllModelDeselected()
+                                onAllModelDeselected(filteredModels)
                             }
                         },
                     ) {
