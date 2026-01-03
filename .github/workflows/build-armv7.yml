@@ -68,17 +68,17 @@ jobs:
           
           # 写入签名配置到local.properties（如果存在）
           if [ -n "${{ secrets.SIGNING_CONFIG }}" ]; then
-            cat > local.properties << 'EOF'
-          ${{ secrets.SIGNING_CONFIG }}
-          EOF
+            cat > local.properties <<'EOF'
+${{ secrets.SIGNING_CONFIG }}
+EOF
             echo "✓ Signing config prepared"
           fi
           
           # 写入Google Services配置（如果存在）
           if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            cat > app/google-services.json << 'EOF'
-          ${{ secrets.GOOGLE_SERVICES_JSON }}
-          EOF
+            cat > app/google-services.json <<'EOF'
+${{ secrets.GOOGLE_SERVICES_JSON }}
+EOF
             echo "✓ Google Services config prepared"
           fi
 
@@ -133,14 +133,14 @@ jobs:
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
-        if: success()
+        if: success() && hashFiles('build-output/*.apk') != ''
         with:
           name: rikkahub-armv7a-${{ steps.version.outputs.version_name }}
           path: build-output/*.apk
           retention-days: 30
 
       - name: Create Release
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && hashFiles('build-output/*.apk') != ''
         uses: softprops/action-gh-release@v1
         with:
           files: build-output/*.apk
