@@ -109,7 +109,8 @@ build-output/rikkahub_1.7.5_armv7a_20240101_120000.apk
 |------------|------|------|
 | `KEY_BASE64` | Base64 编码的签名密钥 | keystore.jks 的 Base64 编码 |
 | `SIGNING_CONFIG` | 签名配置 | local.properties 的内容 |
-| `GOOGLE_SERVICES_JSON` | Google Services 配置 | google-services.json 的内容 |
+
+> 注意：`google-services.json` 应直接提交到仓库 `app/google-services.json`（不要使用 Secret）。
 
 #### 准备 Secrets
 
@@ -323,7 +324,7 @@ v1.7.5-armv7a-2024-01-01
    ```
    错误: google-services.json not found
    ```
-   → 验证 `GOOGLE_SERVICES_JSON` secret 包含有效 JSON
+   → 验证 `app/google-services.json` 内容为有效的 JSON 并已提交到仓库
 
 3. **内存不足**
    ```

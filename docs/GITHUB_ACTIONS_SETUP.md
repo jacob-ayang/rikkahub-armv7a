@@ -87,23 +87,22 @@ keyPassword=your_key_password
 - `rikkahub_key`: 你的 key 别名
 - `your_key_password`: 你的 key 密码
 
-### Secret 3: GOOGLE_SERVICES_JSON
+### Google Services configuration (commit to repo)
 
-从 Firebase 控制台获取 `google-services.json`：
+从 Firebase 控制台下载 `google-services.json` 并将其放在仓库的 `app/google-services.json`（提交到仓库）。请不要将 `google-services.json` 存储为 GitHub Secret。步骤：
 
 1. 访问 [Firebase Console](https://console.firebase.google.com)
-2. 选择你的项目
-3. 点击设置图标 > 项目设置
-4. 下载 `google-services.json`
-5. 复制完整的 JSON 内容
+2. 选择你的项目 -> 设置 (齿轮) -> 项目设置
+3. 下载 `google-services.json`
+4. 将文件放置为 `app/google-services.json` 并提交到主分支
 
 示例：
-```json
-{
-  "type": "service_account",
-  "project_id": "rikkahub-xxx",
-  ...（完整内容）
-}
+```bash
+# 将文件添加到仓库并提交
+mv ~/Downloads/google-services.json app/google-services.json
+git add app/google-services.json
+git commit -m "chore: add google-services.json for Firebase config"
+git push origin master
 ```
 
 ## 🔐 步骤 3: 在 GitHub 中添加 Secrets
@@ -133,11 +132,7 @@ keyPassword=your_key_password
    ```
 3. 点击 **Add secret**
 
-### 添加 SECRET 3: GOOGLE_SERVICES_JSON
-
-1. **Name**: `GOOGLE_SERVICES_JSON`
-2. **Value**: 粘贴完整的 google-services.json 内容
-3. 点击 **Add secret**
+**注意**：本项目不再使用 `GOOGLE_SERVICES_JSON` Secret；请直接将 `app/google-services.json` 提交到仓库并确保其内容为有效的 Firebase 配置。
 
 ## ✅ 验证配置
 
@@ -219,7 +214,7 @@ keyPassword=your_key_password
 
 ### 构建失败: "google-services.json not found"
 
-**原因**: `GOOGLE_SERVICES_JSON` 内容无效
+**原因**: `app/google-services.json` 内容无效或缺失
 
 **解决**:
 1. 重新从 Firebase 下载 json 文件

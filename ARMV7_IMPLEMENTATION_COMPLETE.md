@@ -148,11 +148,12 @@
 ### ✅ GitHub Secrets 支持
 - ✅ `KEY_BASE64` - Base64 编码的签名密钥
 - ✅ `SIGNING_CONFIG` - 签名配置参数
-- ✅ `GOOGLE_SERVICES_JSON` - Firebase 配置
+
+### ✅ Firebase 配置
+- ✅ `app/google-services.json` - 已提交到仓库并用于 CI
 
 ### ✅ 不追踪的敏感文件
 - ✅ `local.properties` - 本地签名配置
-- ✅ `app/google-services.json` - Firebase 配置
 - ✅ `app/app.key` - 临时密钥存储
 - ✅ `*.jks` - 签名密钥文件
 
@@ -216,7 +217,7 @@ GitHub 仓库 > Actions > Build ARM V7 > Run workflow
 2. **GitHub 配置** (必需，用于 CI/CD):
    - [ ] 添加 `KEY_BASE64` Secret
    - [ ] 添加 `SIGNING_CONFIG` Secret
-   - [ ] 添加 `GOOGLE_SERVICES_JSON` Secret
+   - [ ] 将 `app/google-services.json` 提交到仓库（不要使用 `GOOGLE_SERVICES_JSON` Secret）
 
 3. **验证配置**:
    - [ ] 本地测试编译

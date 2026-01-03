@@ -214,13 +214,15 @@ GitHub Actions 触发
 |--------|------|------|
 | `KEY_BASE64` | 签名密钥 | Base64 编码的 .jks 文件 |
 | `SIGNING_CONFIG` | 签名配置 | local.properties 内容 |
-| `GOOGLE_SERVICES_JSON` | Firebase 配置 | google-services.json 内容 |
+
+### Firebase 配置
+
+`app/google-services.json` 应被添加并提交到仓库，以便 CI 使用。请不要将其存储为 Secret。
 
 ### 不追踪的文件
 
 ```
 local.properties          # 本地签名配置
-app/google-services.json  # Firebase 配置
 app/app.key               # 签名密钥文件
 *.jks                     # 所有密钥文件
 ```
@@ -383,7 +385,8 @@ v{version}-armv7a-{date}
 
 - [ ] 创建签名密钥 (如无)
 - [ ] 从 Firebase 下载 google-services.json
-- [ ] 配置 GitHub Secrets (KEY_BASE64, SIGNING_CONFIG, GOOGLE_SERVICES_JSON)
+- [ ] 配置 GitHub Secrets (KEY_BASE64, SIGNING_CONFIG)
+- [ ] 将 `app/google-services.json` 提交到仓库（不要使用 `GOOGLE_SERVICES_JSON` Secret）
 - [ ] 本地编译测试
 - [ ] 创建第一个 GitHub Release
 

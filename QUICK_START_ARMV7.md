@@ -82,7 +82,7 @@ cat rikkahub.jks | base64 -w 0
   keyAlias=your_alias
   keyPassword=your_password
   ```
-- `GOOGLE_SERVICES_JSON`: `google-services.json` 的完整内容
+- `google-services.json`: 将 `google-services.json` 下载并提交到 `app/google-services.json`，不要使用 Secret。
 
 ### 步骤 2: 添加 GitHub Secrets (3 分钟)
 
@@ -92,7 +92,7 @@ cat rikkahub.jks | base64 -w 0
 4. 分别添加三个 Secret:
    - Name: `KEY_BASE64`, Value: [Base64 字符串]
    - Name: `SIGNING_CONFIG`, Value: [配置内容]
-   - Name: `GOOGLE_SERVICES_JSON`, Value: [JSON 内容]
+   - **不要** 添加 `GOOGLE_SERVICES_JSON` Secret；请将 `google-services.json` 下载并提交到仓库的 `app/google-services.json`。
 
 ### 步骤 3: 触发编译 (1 分钟)
 

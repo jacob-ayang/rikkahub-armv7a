@@ -60,7 +60,8 @@ grep versionCode app/build.gradle.kts
 |------|------|
 | `KEY_BASE64` | 签名密钥的 Base64 编码 |
 | `SIGNING_CONFIG` | local.properties 内容 |
-| `GOOGLE_SERVICES_JSON` | google-services.json 内容 |
+
+> 注意：`google-services.json` 应直接提交到 `app/google-services.json`，不要使用 Secret。
 
 ### 准备 Secrets
 
