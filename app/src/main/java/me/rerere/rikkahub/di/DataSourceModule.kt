@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.di
 
 import androidx.room.Room
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.serialization.json.Json
@@ -8,6 +10,7 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
+import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -19,6 +22,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_6_7
 import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.WebdavSync
+import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -99,6 +103,7 @@ val dataSourceModule = module {
                     .build()
                 chain.proceed(request)
             }
+            .addInterceptor(RequestLoggingInterceptor())
             .addInterceptor(AIRequestInterceptor(remoteConfig = get()))
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.HEADERS
@@ -116,6 +121,30 @@ val dataSourceModule = module {
 
     single {
         WebdavSync(settingsStore = get(), json = get(), context = get())
+    }
+
+    single<HttpClient> {
+        HttpClient(OkHttp) {
+            engine {
+                config {
+                    connectTimeout(20, TimeUnit.SECONDS)
+                    readTimeout(10, TimeUnit.MINUTES)
+                    writeTimeout(120, TimeUnit.SECONDS)
+                    followSslRedirects(true)
+                    followRedirects(true)
+                    retryOnConnectionFailure(true)
+                }
+            }
+        }
+    }
+
+    single {
+        S3Sync(
+            settingsStore = get(),
+            json = get(),
+            context = get(),
+            httpClient = get()
+        )
     }
 
     single<Retrofit> {
