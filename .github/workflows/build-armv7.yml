@@ -29,7 +29,10 @@ on:
 jobs:
   build-armv7:
     runs-on: ubuntu-latest
-    
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v4
         with:
