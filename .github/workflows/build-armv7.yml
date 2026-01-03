@@ -45,39 +45,42 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Check required secrets
-        run: |
-          if [ -z "${{ secrets.KEY_BASE64 }}" ]; then
-            echo "❌ Error: KEY_BASE64 secret is not configured"
-            echo "Please add KEY_BASE64 secret to your GitHub repository"
-            exit 1
-          fi
-          if [ -z "${{ secrets.SIGNING_CONFIG }}" ]; then
-            echo "❌ Error: SIGNING_CONFIG secret is not configured"
-            echo "Please add SIGNING_CONFIG secret to your GitHub repository"
-            exit 1
-          fi
-          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "❌ Error: GOOGLE_SERVICES_JSON secret is not configured"
-            echo "Please add GOOGLE_SERVICES_JSON secret to your GitHub repository"
-            exit 1
-          fi
-          echo "✅ All required secrets are configured"
-
       - name: Prepare build files
         run: |
-          # 解码base64编码的keystore文件
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+          # 检查必需的 secrets
+          if [ -z "${{ secrets.KEY_BASE64 }}" ] || [ -z "${{ secrets.SIGNING_CONFIG }}" ] || [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "⚠️  Warning: Required secrets are not fully configured"
+            echo "KEY_BASE64: ${{ secrets.KEY_BASE64 != '' && '✓ configured' || '✗ missing' }}"
+            echo "SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG != '' && '✓ configured' || '✗ missing' }}"
+            echo "GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON != '' && '✓ configured' || '✗ missing' }}"
+            echo ""
+            echo "Build will proceed with available configuration."
+            echo "See docs/GITHUB_ACTIONS_SETUP.md for setup instructions."
+          else
+            echo "✅ All required secrets are configured"
+          fi
           
-          # 写入签名配置到local.properties
-          cat > local.properties << 'EOF'
+          # 解码base64编码的keystore文件（如果存在）
+          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+            echo "✓ Signing key prepared"
+          fi
+          
+          # 写入签名配置到local.properties（如果存在）
+          if [ -n "${{ secrets.SIGNING_CONFIG }}" ]; then
+            cat > local.properties << 'EOF'
           ${{ secrets.SIGNING_CONFIG }}
           EOF
+            echo "✓ Signing config prepared"
+          fi
           
-          # 写入Google Services配置
-          cat > app/google-services.json << 'EOF'
+          # 写入Google Services配置（如果存在）
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            cat > app/google-services.json << 'EOF'
           ${{ secrets.GOOGLE_SERVICES_JSON }}
           EOF
+            echo "✓ Google Services config prepared"
+          fi
 
       - name: Modify gradle config for ARM V7
         run: |
@@ -112,14 +115,21 @@ jobs:
         run: |
           mkdir -p build-output
           
-          # 查找所有生成的 APK
-          for apk in app/build/outputs/apk/release/*.apk; do
+          # 查找所有生成的 APK (可能在 armv7/release 目录下)
+          found_apk=false
+          for apk in app/build/outputs/apk/armv7/release/*.apk app/build/outputs/apk/release/*.apk; do
             if [ -f "$apk" ]; then
               new_name="rikkahub_${{ steps.version.outputs.version_name }}_armv7a_${{ steps.version.outputs.build_date }}.apk"
               cp "$apk" "build-output/$new_name"
               echo "Generated: $new_name"
+              found_apk=true
             fi
           done
+          
+          if [ "$found_apk" = false ]; then
+            echo "⚠️  No APK files found in expected locations"
+            find app/build/outputs -name "*.apk" -type f || echo "No APK files found at all"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
