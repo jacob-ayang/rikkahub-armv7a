@@ -47,53 +47,14 @@ jobs:
 
       - name: Prepare build files
         run: |
-          # 检查必需的 secrets
-          if [ -z "${{ secrets.KEY_BASE64 }}" ] || [ -z "${{ secrets.SIGNING_CONFIG }}" ] || [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "⚠️  Warning: Required secrets are not fully configured"
-            echo "KEY_BASE64: ${{ secrets.KEY_BASE64 != '' && '✓ configured' || '✗ missing' }}"
-            echo "SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG != '' && '✓ configured' || '✗ missing' }}"
-            echo "GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON != '' && '✓ configured' || '✗ missing' }}"
-            echo ""
-            echo "Build will proceed with available configuration."
-            echo "See docs/GITHUB_ACTIONS_SETUP.md for setup instructions."
-          else
-            echo "✅ All required secrets are configured"
-          fi
+          # 解码base64编码的keystore文件
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
           
-          # 解码base64编码的keystore文件（如果存在）
-          if [ -n "${{ secrets.KEY_BASE64 }}" ]; then
-            echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key 2>/dev/null || echo "⚠️  Failed to decode signing key"
-            if [ -f app/app.key ] && [ -s app/app.key ]; then
-              echo "✓ Signing key prepared"
-            fi
-          fi
+          # 写入签名配置到local.properties
+          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
           
-          # 写入签名配置到local.properties（如果存在）
-          if [ -n "${{ secrets.SIGNING_CONFIG }}" ]; then
-            cat > local.properties <<'SIGNING_EOF'
-${{ secrets.SIGNING_CONFIG }}
-SIGNING_EOF
-            echo "✓ Signing config prepared"
-          fi
-          
-          # 写入Google Services配置（如果存在）
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            cat > app/google-services.json <<'GOOGLE_EOF'
-${{ secrets.GOOGLE_SERVICES_JSON }}
-GOOGLE_EOF
-            # 验证 JSON 格式
-            if command -v python3 &> /dev/null; then
-              if python3 -m json.tool app/google-services.json > /dev/null 2>&1; then
-                echo "✓ Google Services config prepared (JSON valid)"
-              else
-                echo "✗ Google Services config is not valid JSON"
-                echo "File content preview (first 20 lines):"
-                head -20 app/google-services.json
-              fi
-            else
-              echo "✓ Google Services config prepared (validation skipped)"
-            fi
-          fi
+          # 写入Google Services配置
+          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > app/google-services.json
 
       - name: Modify gradle config for ARM V7
         run: |
@@ -128,32 +89,25 @@ GOOGLE_EOF
         run: |
           mkdir -p build-output
           
-          # 查找所有生成的 APK (可能在 armv7/release 目录下)
-          found_apk=false
-          for apk in app/build/outputs/apk/armv7/release/*.apk app/build/outputs/apk/release/*.apk; do
+          # 查找所有生成的 APK
+          for apk in app/build/outputs/apk/release/*.apk; do
             if [ -f "$apk" ]; then
               new_name="rikkahub_${{ steps.version.outputs.version_name }}_armv7a_${{ steps.version.outputs.build_date }}.apk"
               cp "$apk" "build-output/$new_name"
               echo "Generated: $new_name"
-              found_apk=true
             fi
           done
-          
-          if [ "$found_apk" = false ]; then
-            echo "⚠️  No APK files found in expected locations"
-            find app/build/outputs -name "*.apk" -type f || echo "No APK files found at all"
-          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
-        if: success() && hashFiles('build-output/*.apk') != ''
+        if: success()
         with:
           name: rikkahub-armv7a-${{ steps.version.outputs.version_name }}
           path: build-output/*.apk
           retention-days: 30
 
       - name: Create Release
-        if: github.event_name == 'workflow_dispatch' && hashFiles('build-output/*.apk') != ''
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
           files: build-output/*.apk
