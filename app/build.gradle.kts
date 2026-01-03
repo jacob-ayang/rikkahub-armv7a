@@ -31,12 +31,31 @@ android {
         }
     }
 
+    flavorDimensions += "arch"
+    
+    productFlavors {
+        create("universal") {
+            dimension = "arch"
+            ndk {
+                abiFilters.clear()
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
+        }
+        create("armv7") {
+            dimension = "arch"
+            ndk {
+                abiFilters.clear()
+                abiFilters.add("armeabi-v7a")
+            }
+        }
+    }
+
     splits {
         abi {
             // AppBundle tasks usually contain "bundle" in their name
             //noinspection WrongGradleMethod
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
-            isEnable = !isBuildingBundle
+            isEnable = !isBuildingBundle && gradle.startParameter.projectProperties["build.universal"] != "false"
             reset()
             include("arm64-v8a", "x86_64")
             isUniversalApk = true

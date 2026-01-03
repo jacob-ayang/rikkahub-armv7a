@@ -1,0 +1,156 @@
+name: Build ARM V7
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (draft/prerelease/release)'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+          - draft
+          - prerelease
+          - release
+  push:
+    branches:
+      - master
+    paths:
+      - 'app/src/**'
+      - 'ai/src/**'
+      - 'common/src/**'
+      - 'highlight/src/**'
+      - 'search/src/**'
+      - 'tts/src/**'
+      - 'app/build.gradle.kts'
+      - 'build.gradle.kts'
+      - '.github/workflows/build-armv7.yml'
+
+jobs:
+  build-armv7:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare build files
+        run: |
+          # 解码base64编码的keystore文件
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+          
+          # 写入签名配置到local.properties
+          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          
+          # 写入Google Services配置
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+
+      - name: Modify gradle config for ARM V7
+        run: |
+          # 修改 build.gradle.kts，为 ARM V7 配置专用的 ABI
+          cat > /tmp/armv7_patch.kt <<'EOF'
+          // 这个文件在编译时会被注入以支持 ARM V7
+          ndk {
+              abiFilters.clear()
+              abiFilters.add("armeabi-v7a")
+          }
+          EOF
+          echo "ARM V7 configuration prepared"
+
+      - name: Build ARM V7 APK
+        run: |
+          chmod +x gradlew
+          ./gradlew clean assembleArmv7Release -Pandroid.injected.build.model=full
+        env:
+          GRADLE_OPTS: "-Xmx4096m"
+
+      - name: Extract version info
+        id: version
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
+          VERSION_CODE=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts | head -1)
+          BUILD_DATE=$(date -u +'%Y-%m-%d')
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
+
+      - name: Rename APK for ARM V7
+        run: |
+          mkdir -p build-output
+          
+          # 查找所有生成的 APK
+          for apk in app/build/outputs/apk/release/*.apk; do
+            if [ -f "$apk" ]; then
+              new_name="rikkahub_${{ steps.version.outputs.version_name }}_armv7a_${{ steps.version.outputs.build_date }}.apk"
+              cp "$apk" "build-output/$new_name"
+              echo "Generated: $new_name"
+            fi
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: rikkahub-armv7a-${{ steps.version.outputs.version_name }}
+          path: build-output/*.apk
+          retention-days: 30
+
+      - name: Create Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build-output/*.apk
+          tag_name: v${{ steps.version.outputs.version_name }}-armv7a-${{ steps.version.outputs.build_date }}
+          name: RikkaHub ARM V7a - v${{ steps.version.outputs.version_name }}
+          draft: ${{ github.event.inputs.release_type == 'draft' }}
+          prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
+          body: |
+            # RikkaHub ARM V7a Build
+            
+            **Version:** v${{ steps.version.outputs.version_name }}
+            **Build Date:** ${{ steps.version.outputs.build_date }}
+            **Architecture:** ARM v7a (32-bit)
+            **Build Code:** ${{ steps.version.outputs.version_code }}
+            
+            ## Changes
+            - ARM V7 architecture optimized build
+            - For devices with 32-bit ARM processors
+            
+            ## Installation
+            1. Download the APK file below
+            2. Transfer to your Android device
+            3. Enable "Unknown Sources" in Settings > Security
+            4. Install the APK file
+            
+            ## Supported Devices
+            - Devices with ARM v7a (32-bit) processors
+            - Android 8.0 and above (API Level 26+)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.version.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Date:** ${{ steps.version.outputs.build_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Architecture:** ARM v7a (32-bit)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d "build-output" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Generated Files" >> $GITHUB_STEP_SUMMARY
+            ls -lh build-output/*.apk 2>/dev/null | awk '{print "- `" $9 "` (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
+          fi
