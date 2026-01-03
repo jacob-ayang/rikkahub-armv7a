@@ -72,7 +72,10 @@ jobs:
       - name: Build ARM V7 APK
         run: |
           chmod +x gradlew
-          ./gradlew clean assembleArmv7Release -Pandroid.injected.build.model=full
+          ./gradlew clean assembleArmv7Release \
+            -Pandroid.injected.build.model=full \
+            --stacktrace \
+            -Dkotlin.incremental=false
         env:
           GRADLE_OPTS: "-Xmx4096m"
 
