@@ -27,4 +27,4 @@
 
 ## Security & Configuration
 - Never commit secrets or signing files. Keep API keys in secure storage; avoid hardcoding.
-- `local.properties` holds signing values; `google-services.json` stays in `app/` and is ignored by Git.
+- `local.properties` holds signing values; `google-services.json` stays in `app/` and should be committed to the repository for CI (do NOT store it as a secret).
