@@ -53,8 +53,9 @@ jobs:
           # 写入签名配置到local.properties
           echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
           
-          # 写入Google Services配置
-          echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > app/google-services.json
+          # Note: google-services.json is already in the repository
+          # If you need to update it, download from Firebase Console and commit
+          echo "✓ Build configuration prepared"
 
       - name: Modify gradle config for ARM V7
         run: |
