@@ -45,6 +45,25 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "❌ Error: KEY_BASE64 secret is not configured"
+            echo "Please add KEY_BASE64 secret to your GitHub repository"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SIGNING_CONFIG }}" ]; then
+            echo "❌ Error: SIGNING_CONFIG secret is not configured"
+            echo "Please add SIGNING_CONFIG secret to your GitHub repository"
+            exit 1
+          fi
+          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "❌ Error: GOOGLE_SERVICES_JSON secret is not configured"
+            echo "Please add GOOGLE_SERVICES_JSON secret to your GitHub repository"
+            exit 1
+          fi
+          echo "✅ All required secrets are configured"
+
       - name: Prepare build files
         run: |
           # 解码base64编码的keystore文件
