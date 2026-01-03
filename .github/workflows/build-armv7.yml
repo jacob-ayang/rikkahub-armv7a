@@ -75,6 +75,8 @@ jobs:
           ./gradlew clean assembleArmv7Release \
             -Pandroid.injected.build.model=full \
             -Pbuild.universal=false \
+            -PminifyEnabled=false \
+            -PshrinkResources=false \
             --stacktrace \
             -Dkotlin.incremental=false
         env:
