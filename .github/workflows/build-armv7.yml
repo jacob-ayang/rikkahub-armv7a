@@ -74,6 +74,7 @@ jobs:
           chmod +x gradlew
           ./gradlew clean assembleArmv7Release \
             -Pandroid.injected.build.model=full \
+            -Pbuild.universal=false \
             --stacktrace \
             -Dkotlin.incremental=false
         env:
