@@ -40,6 +40,43 @@ jobs:
             exit 1
           fi
 
+      - name: Validate signing config
+        run: |
+          set -euo pipefail
+
+          # Check keystore file
+          if [ ! -s "app/app.key" ]; then
+            echo "ERROR: Keystore file app/app.key is missing or empty. Check that secrets.KEY_BASE64 is set in repository."
+            exit 1
+          fi
+
+          # Ensure local.properties exists
+          if [ ! -f local.properties ]; then
+            echo "ERROR: local.properties is missing. Check that secrets.SIGNING_CONFIG is set in repository."
+            exit 1
+          fi
+
+          # Ensure required signing properties
+          if ! grep -q '^storeFile=' local.properties; then
+            echo "storeFile missing in local.properties — setting to app/app.key"
+            echo "storeFile=app/app.key" >> local.properties
+          fi
+
+          if ! grep -q '^storePassword=' local.properties; then
+            echo "ERROR: storePassword missing in local.properties. Please set secrets.SIGNING_CONFIG with storePassword."
+            exit 1
+          fi
+          if ! grep -q '^keyAlias=' local.properties; then
+            echo "ERROR: keyAlias missing in local.properties. Please set secrets.SIGNING_CONFIG with keyAlias."
+            exit 1
+          fi
+          if ! grep -q '^keyPassword=' local.properties; then
+            echo "ERROR: keyPassword missing in local.properties. Please set secrets.SIGNING_CONFIG with keyPassword."
+            exit 1
+          fi
+
+          echo "✓ Signing config validated"
+
       - name: Gradle Build
         run: |
           chmod +x gradlew
