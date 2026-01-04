@@ -100,47 +100,6 @@ jobs:
             echo "✅ Merge completed (no new commits to push)"
           fi
 
-      - name: Get current version
-        id: current_version
-        run: |
-          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
-          CODE=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts | head -1)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "code=$CODE" >> $GITHUB_OUTPUT
-          echo "Current: versionCode=$CODE, versionName=$VERSION"
-
-      - name: Bump version for prerelease
-        id: bump_version
-        if: steps.check_changes.outputs.has_changes == 'true'
-        run: |
-          # 获取当前版本
-          CURRENT_VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
-          CURRENT_CODE=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts | head -1)
-          
-          # 升级 PATCH 版本
-          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-          NEW_PATCH=$((patch + 1))
-          NEW_VERSION="${major}.${minor}.${NEW_PATCH}"
-          NEW_CODE=$((CURRENT_CODE + 1))
-          
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "new_code=$NEW_CODE" >> $GITHUB_OUTPUT
-          echo "Bumping version: $CURRENT_VERSION → $NEW_VERSION"
-          
-          # 更新 build.gradle.kts
-          sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" app/build.gradle.kts
-          sed -i "s/versionName = \"$CURRENT_VERSION\"/versionName = \"$NEW_VERSION\"/" app/build.gradle.kts
-          
-          # 提交版本更新（如果有更改则提交）
-          if git diff --quiet app/build.gradle.kts; then
-            echo "No version changes needed"
-          else
-            git add app/build.gradle.kts
-            git commit -m "chore: bump version to $NEW_VERSION for sync"
-            git push origin master
-            echo "✅ Version bumped to $NEW_VERSION (code: $NEW_CODE)"
-          fi
-
       - name: Sync upstream release version
         id: sync_upstream_version
         if: steps.check_release.outputs.upstream_tag != ''
@@ -183,6 +142,7 @@ jobs:
   trigger-build:
     needs: sync-fork
     runs-on: ubuntu-latest
+    # 在检测到上游新 release 时自动触发构建
     if: needs.sync-fork.outputs.upstream_tag != ''
     
     steps:
