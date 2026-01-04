@@ -39,12 +39,12 @@ jobs:
       - name: Fetch upstream
         run: |
           git remote add upstream https://github.com/rikkahub/rikkahub.git || true
-          # 配置 fetch refspec 以创建追踪分支
-          git config remote.upstream.fetch "+refs/heads/*:refs/remotes/upstream/*"
-          # 获取 upstream 分支和 tags（忽略 tag 冲突）
+          # 获取 upstream master 分支（忽略 tag 冲突错误）
+          git fetch upstream master 2>&1 || true
+          # 同步 tags
           git fetch upstream --tags 2>&1 || true
           echo "=== Upstream master ===" 
-          git log --oneline -1 upstream/master
+          git log --oneline -1 upstream/master 2>/dev/null || echo "⚠️ No upstream/master yet"
 
       - name: Check for changes
         id: check_changes
