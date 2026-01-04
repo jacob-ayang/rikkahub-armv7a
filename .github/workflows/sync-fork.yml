@@ -39,7 +39,8 @@ jobs:
       - name: Fetch upstream
         run: |
           git remote add upstream https://github.com/rikkahub/rikkahub.git || true
-          git fetch upstream master --tags
+          # 获取 upstream master 分支和 tags（忽略 tag 冲突）
+          git fetch upstream master --tags 2>&1 || true
           echo "=== Upstream master ===" 
           git log --oneline -1 upstream/master
 
