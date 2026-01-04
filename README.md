@@ -10,7 +10,7 @@ conversations 🤖💬
 
 Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
 
-[简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
+English
 </div>
 
 <div align="center">
@@ -59,10 +59,17 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 
 ## ✨ Contributing
 
-This project is developed using [Android Studio](https://developer.android.com/studio). PRs are
-welcome!
+This project is developed using [Android Studio](https://developer.android.com/studio). PRs are welcome!
 
-Technology stack documentation:
+### 📚 Documentation
+
+- 🚀 **[Quick Start (ARM V7)](QUICK_START_ARMV7.md)** - Get started in 5 minutes
+- 🔧 **[Setup Instructions](SETUP_INSTRUCTIONS.md)** - Complete development setup
+- 🔄 **[Fork Sync Guide](FORK_SYNC_GUIDE.md)** - Automated fork synchronization
+- 📦 **[Version Management](VERSION_MANAGEMENT.md)** - Release and versioning
+- 📋 **[Project Guidelines](AGENTS.md)** - Coding standards and conventions
+
+### 🛠️ Technology Stack
 
 - [Kotlin](https://kotlinlang.org/) (Development language)
 - [Koin](https://insert-koin.io/) (Dependency Injection)
