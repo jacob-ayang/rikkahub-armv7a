@@ -172,27 +172,23 @@ jobs:
           keyPassword=rikkahub@123
           EOF
 
-      - name: Build prerelease APKs
+      - name: Build prerelease APK
         run: |
           chmod +x gradlew
           echo "Building ARM V7 Prerelease APK..."
           ./gradlew assembleArmv7Release -x test -x lint
-          echo "Building Universal Prerelease APK..."
-          ./gradlew assembleUniversalRelease -x test -x lint
 
-      - name: Verify APK files
+      - name: Verify APK file
         id: verify
         run: |
           ARMV7_APK=$(find app/build/outputs/apk/armv7/release -name "*.apk" | head -1)
-          UNIVERSAL_APK=$(find app/build/outputs/apk/universal/release -name "*.apk" | head -1)
           
-          if [ -z "$ARMV7_APK" ] || [ -z "$UNIVERSAL_APK" ]; then
-            echo "ERROR: APK files not found"
+          if [ -z "$ARMV7_APK" ]; then
+            echo "ERROR: ARM V7 APK file not found"
             exit 1
           fi
           
           echo "armv7_apk=$ARMV7_APK" >> $GITHUB_OUTPUT
-          echo "universal_apk=$UNIVERSAL_APK" >> $GITHUB_OUTPUT
 
       - name: Create prerelease
         uses: ncipollo/release-action@v1
@@ -211,14 +207,12 @@ jobs:
             
             ### APK Files
             - **ARM V7a (32-bit)** - For older Android devices (API 26+)
-            - **Universal (64-bit)** - For modern Android devices with arm64-v8a/x86_64
             
             ⚠️ This is a prerelease version. It may contain bugs. Use at your own risk.
             
             For stable releases, wait for official upstream releases.
           artifacts: |
             ${{ steps.verify.outputs.armv7_apk }}
-            ${{ steps.verify.outputs.universal_apk }}
           allowUpdates: true
 
       - name: Cleanup
@@ -283,27 +277,23 @@ jobs:
           keyPassword=rikkahub@123
           EOF
 
-      - name: Build release APKs
+      - name: Build release APK
         run: |
           chmod +x gradlew
           echo "Building ARM V7 Release APK for ${{ needs.sync-fork.outputs.upstream_tag }}..."
           ./gradlew assembleArmv7Release -x test -x lint
-          echo "Building Universal Release APK for ${{ needs.sync-fork.outputs.upstream_tag }}..."
-          ./gradlew assembleUniversalRelease -x test -x lint
 
-      - name: Verify APK files
+      - name: Verify APK file
         id: verify
         run: |
           ARMV7_APK=$(find app/build/outputs/apk/armv7/release -name "*.apk" | head -1)
-          UNIVERSAL_APK=$(find app/build/outputs/apk/universal/release -name "*.apk" | head -1)
           
-          if [ -z "$ARMV7_APK" ] || [ -z "$UNIVERSAL_APK" ]; then
-            echo "ERROR: APK files not found"
+          if [ -z "$ARMV7_APK" ]; then
+            echo "ERROR: ARM V7 APK file not found"
             exit 1
           fi
           
           echo "armv7_apk=$ARMV7_APK" >> $GITHUB_OUTPUT
-          echo "universal_apk=$UNIVERSAL_APK" >> $GITHUB_OUTPUT
 
       - name: Create release
         uses: ncipollo/release-action@v1
@@ -324,18 +314,14 @@ jobs:
             - **ARM V7a (32-bit)** - For older Android devices (API 26+)
               - Architecture: armeabi-v7a
             
-            - **Universal (64-bit)** - For modern Android devices (API 26+)
-              - Architectures: arm64-v8a, x86_64
-            
             ### Installation
-            1. Download the appropriate APK for your device
+            1. Download the APK for your device
             2. Enable installation from unknown sources
             3. Install the APK
             
             For upstream changelog and details, see: https://github.com/rikkahub/rikkahub/releases/tag/${{ needs.sync-fork.outputs.upstream_tag }}
           artifacts: |
             ${{ steps.verify.outputs.armv7_apk }}
-            ${{ steps.verify.outputs.universal_apk }}
           allowUpdates: true
 
       - name: Cleanup
