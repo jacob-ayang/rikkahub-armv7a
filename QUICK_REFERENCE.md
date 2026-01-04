@@ -54,25 +54,31 @@ grep versionCode app/build.gradle.kts
 
 ## 📋 GitHub Actions 设置
 
-### 需要的 Secrets
+### 需要的 Secret (仅 1 个！)
 
-| 名称 | 来源 |
-|------|------|
-| `KEY_BASE64` | 签名密钥的 Base64 编码 |
-| `SIGNING_CONFIG` | local.properties 内容 |
-| `GOOGLE_SERVICES_JSON` | google-services.json 内容 |
+| 名称 | 来源 | 说明 |
+|------|------|------|
+| `KEY_BASE64` | 签名密钥的 Base64 编码 | 约 3500+ 字符 |
 
-### 准备 Secrets
+✅ 签名配置已硬编码在 workflow 中
+✅ google-services.json 从仓库目录读取
+
+### 准备 Secret
 
 ```bash
 # 编码签名密钥
 cat rikkahub.jks | base64 -w 0 > keystore.b64
+
+# 查看 Base64 字符串
+cat keystore.b64
 ```
 
 ### 添加到 GitHub
 
 ```
 Settings > Secrets and variables > Actions > New repository secret
+  Name: KEY_BASE64
+  Value: [粘贴上面的 Base64 字符串]
 ```
 
 ---

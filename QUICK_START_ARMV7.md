@@ -57,7 +57,7 @@ app/build/outputs/apk/armv7/release/rikkahub_1.7.5_armv7Release.apk
 
 ## 📱 配置自动编译 (GitHub Actions)
 
-### 步骤 1: 准备 Secrets (5 分钟)
+### 步骤 1: 准备 Secret (2 分钟)
 
 **1.1 将签名密钥转为 Base64:**
 
@@ -69,30 +69,18 @@ cat rikkahub.jks | base64 -w 0
 [Convert]::ToBase64String([io.File]::ReadAllBytes("rikkahub.jks"))
 ```
 
-复制输出的长字符串。
+复制输出的长字符串（应约 3500+ 字符）。
 
-**1.2 收集配置:**
-
-创建以下内容：
-- `KEY_BASE64`: 上面的 Base64 字符串
-- `SIGNING_CONFIG`: 
-  ```
-  storeFile=app/app.key
-  storePassword=your_password
-  keyAlias=your_alias
-  keyPassword=your_password
-  ```
-- `GOOGLE_SERVICES_JSON`: `google-services.json` 的完整内容
-
-### 步骤 2: 添加 GitHub Secrets (3 分钟)
+### 步骤 2: 添加 GitHub Secret (2 分钟)
 
 1. 进入 GitHub 仓库 > **Settings**
 2. 左侧 > **Secrets and variables** > **Actions**
 3. 点击 **New repository secret**
-4. 分别添加三个 Secret:
-   - Name: `KEY_BASE64`, Value: [Base64 字符串]
-   - Name: `SIGNING_CONFIG`, Value: [配置内容]
-   - Name: `GOOGLE_SERVICES_JSON`, Value: [JSON 内容]
+4. 添加一个 Secret:
+   - Name: `KEY_BASE64`
+   - Value: [粘贴上面的 Base64 字符串]
+
+✅ **只需这一个 Secret！** 其他配置已自动化。
 
 ### 步骤 3: 触发编译 (1 分钟)
 

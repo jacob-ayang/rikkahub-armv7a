@@ -105,12 +105,11 @@ keyPassword=your_key_password
 
 1. 进入 GitHub 仓库 → **Settings**
 2. 左侧菜单 → **Secrets and variables** → **Actions**
-3. 点击 **New repository secret**，添加以下两个 Secret：
+3. 点击 **New repository secret**，添加以下 Secret：
 
 | Secret 名称 | 值 | 说明 |
 |------------|-----|------|
 | `KEY_BASE64` | keystore Base64 字符串 | Keystore 文件的完整 Base64 编码 |
-| `SIGNING_CONFIG` | 签名配置内容 | 4 行配置（见 1.3） |
 
 **添加方法：**
 ```
@@ -119,15 +118,34 @@ Value: [粘贴 Base64 字符串]
 点击 "Add secret"
 ```
 
-重复以上步骤，添加 SIGNING_CONFIG。
-
+**✅ 不需要添加 SIGNING_CONFIG！** 签名凭证已直接硬编码在工作流中。
 **✅ 不需要添加 GOOGLE_SERVICES_JSON！** 工作流会自动从 `app/google-services.json` 读取。
 
 ### 第三步：验证配置
 
-运行任何工作流前，可以通过手动触发来测试配置：
+运行本地验证脚本：
 
-1. 进入 GitHub 仓库 → **Actions**
+```bash
+./scripts/validate-workflow.sh
+```
+
+如果所有检查都通过，你会看到：
+```
+✓ All workflow files present
+✓ Build flavors configured correctly
+✓ Helper scripts available
+✓ Documentation complete
+✓ google-services.json configured
+
+Next Steps:
+1. Configure GitHub Secrets (only 1 required!):
+   ./scripts/setup-workflow.sh
+
+2. Add this Secret to GitHub:
+   - KEY_BASE64
+```
+
+然后在 GitHub 上添加该 Secret，进入仓库 → **Actions**
 2. 选择 **Build ARM V7** / **Build Universal** / **Build All Variants**
 3. 点击 **Run workflow**
 4. 在弹出菜单中选择：
@@ -201,9 +219,10 @@ Value: [粘贴 Base64 字符串]
 **原因：** Secret 未正确配置
 
 **解决：**
-1. 确认已添加两个 Secret：`KEY_BASE64`, `SIGNING_CONFIG`
-2. 确认 Secret 值非空
+1. 确认已添加 Secret：`KEY_BASE64`
+2. 确认 Secret 值非空（应包含约 3500+ 个字符的 Base64 字符串）
 3. 检查 Secret 名称拼写是否完全一致（区分大小写）
+4. 若仍有问题，删除重新创建，确保粘贴完整
 
 #### ❌ 错误：app/google-services.json not found
 
@@ -370,7 +389,7 @@ make build-all            # 编译所有版本
 
 ### Q: APK 签名信息在哪里？
 
-**A:** Workflow 中的 `SIGNING_CONFIG` Secret 包含签名信息，Gradle 自动读取并应用。
+**A:** 签名凭证（密码和别名）已直接硬编码在 workflow 文件中，Gradle 自动读取 local.properties 并应用。Keystore 文件从 KEY_BASE64 Secret 解码。
 
 ### Q: 发布的 Release 可以删除吗？
 

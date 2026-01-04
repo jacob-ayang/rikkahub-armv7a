@@ -21,15 +21,20 @@ cat /tmp/key_base64.txt
 
 ### Secret 2: SIGNING_CONFIG
 
-**文件位置：** `/tmp/signing_config.txt`
+**⚠️ 重要更新：** 签名配置现已硬编码在 workflow 中，你只需提供 KEY_BASE64！
 
-**完整内容：**
+**原因：** SIGNING_CONFIG 中的 storeFile 路径容易出错，现在 workflow 自动设置为 `rikkahub.keystore`
+
+**如果你需要修改配置：**
+编辑 `.github/workflows/build-*.yml` 文件，在 "Prepare signing credentials" 步骤中修改这些值：
 ```
-storeFile=app/app.key
-storePassword=rikkahub@123
-keyAlias=rikkahub
-keyPassword=rikkahub@123
+storeFile=rikkahub.keystore      # keystore 文件名
+storePassword=rikkahub@123       # keystore 密码
+keyAlias=rikkahub                # 密钥别名
+keyPassword=rikkahub@123         # 密钥密码
 ```
+
+默认值已设置，如无特殊需求，可忽略此 Secret。
 
 ---
 
@@ -50,22 +55,16 @@ keyPassword=rikkahub@123
 
 ### 3️⃣ 添加第二个 Secret (SIGNING_CONFIG)
 
-1. 再次点击 **New repository secret**
-2. **Name:** `SIGNING_CONFIG`
-3. **Value:** 复制以下内容：
-   ```
-   storeFile=app/app.key
-   storePassword=rikkahub@123
-   keyAlias=rikkahub
-   keyPassword=rikkahub@123
-   ```
-4. 点击 **Add secret**
+⚠️ **已简化：** SIGNING_CONFIG 现已硬编码在 workflow 中！
+
+如需自定义签名参数，编辑相应 workflow 文件的 "Prepare signing credentials" 步骤。
 
 ### 4️⃣ 验证添加成功
 
-添加完成后，你应该看到这两个 Secret 列在 Actions Secrets 中：
+添加完成后，你应该看到这个 Secret 列在 Actions Secrets 中：
 - ✅ `KEY_BASE64`
-- ✅ `SIGNING_CONFIG`
+
+签名配置已自动处理，无需额外配置！
 
 ---
 

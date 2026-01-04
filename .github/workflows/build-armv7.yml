@@ -61,8 +61,8 @@ jobs:
           echo "Validating ARM V7 build prerequisites..."
           
           # Check for required secrets
-          if [ -z "${{ secrets.KEY_BASE64 }}" ] || [ -z "${{ secrets.SIGNING_CONFIG }}" ]; then
-            echo "ERROR: Missing required secrets (KEY_BASE64, SIGNING_CONFIG)"
+          if [ -z "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "ERROR: Missing required secret (KEY_BASE64)"
             exit 1
           fi
           
@@ -78,11 +78,16 @@ jobs:
       - name: Prepare signing credentials
         if: steps.validate.outputs.validation_passed == 'true'
         run: |
-          # Decode and store keystore
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+          # Decode and store keystore in project root
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
           
-          # Create local.properties with signing config
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          # Create local.properties with signing config (using relative path from project root)
+          cat > local.properties << 'EOF'
+          storeFile=rikkahub.keystore
+          storePassword=rikkahub@123
+          keyAlias=rikkahub
+          keyPassword=rikkahub@123
+          EOF
           
           echo "✓ Build credentials prepared"
 
@@ -226,4 +231,4 @@ jobs:
         if: always()
         run: |
           # Clean up sensitive files to avoid accidental leaks
-          rm -f local.properties app/app.key app/google-services.json
+          rm -f local.properties rikkahub.keystore app/app.key
