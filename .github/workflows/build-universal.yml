@@ -1,4 +1,4 @@
-name: Build ARM V7
+name: Build Universal
 
 on:
   workflow_dispatch:
@@ -25,16 +25,16 @@ on:
       - 'document/src/**'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
-      - '.github/workflows/build-armv7.yml'
+      - '.github/workflows/build-universal.yml'
 
 permissions:
   contents: write
   packages: read
 
 jobs:
-  build-armv7:
+  build-universal:
     runs-on: ubuntu-latest
-    name: Build ARM V7a Release
+    name: Build Universal Release
     
     steps:
       - name: Checkout code
@@ -58,7 +58,7 @@ jobs:
       - name: Validate build configuration
         id: validate
         run: |
-          echo "Validating ARM V7 build prerequisites..."
+          echo "Validating universal build prerequisites..."
           
           # Check for required secrets
           if [ -z "${{ secrets.KEY_BASE64 }}" ] || [ -z "${{ secrets.SIGNING_CONFIG }}" ] || [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
@@ -98,10 +98,10 @@ jobs:
           
           echo "Build Info: Version $VERSION_NAME (Code: $VERSION_CODE)"
 
-      - name: Build ARM V7a Release APK
+      - name: Build Universal Release APK
         run: |
           chmod +x gradlew
-          ./gradlew clean assembleArmv7Release \
+          ./gradlew clean assembleUniversalRelease \
             -Pandroid.injected.build.model=full \
             -Porg.gradle.jvmargs="-Xmx4096m" \
             --stacktrace
@@ -111,13 +111,13 @@ jobs:
       - name: Verify build output
         id: verify
         run: |
-          echo "Verifying ARM V7 build outputs..."
+          echo "Verifying universal build outputs..."
           
           # Find the generated APK
-          APK_PATH=$(find app/build/outputs/apk -name "*armv7*release*.apk" -type f | head -1)
+          APK_PATH=$(find app/build/outputs/apk -name "*universal*release*.apk" -type f | head -1)
           
           if [ -z "$APK_PATH" ]; then
-            echo "ERROR: ARM V7 APK not found in build outputs"
+            echo "ERROR: Universal APK not found in build outputs"
             echo "Available outputs:"
             find app/build/outputs -type f -name "*.apk" || true
             exit 1
@@ -137,7 +137,7 @@ jobs:
           mkdir -p build-output
           
           APK_PATH="${{ steps.verify.outputs.apk_path }}"
-          NEW_NAME="rikkahub-${{ steps.version.outputs.version_name }}-armv7a-${{ steps.version.outputs.build_timestamp }}.apk"
+          NEW_NAME="rikkahub-${{ steps.version.outputs.version_name }}-universal-${{ steps.version.outputs.build_timestamp }}.apk"
           
           cp "$APK_PATH" "build-output/$NEW_NAME"
           
@@ -148,7 +148,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: rikkahub-armv7a-${{ steps.version.outputs.version_name }}
+          name: rikkahub-universal-${{ steps.version.outputs.version_name }}
           path: build-output/
           retention-days: 30
           if-no-files-found: error
@@ -158,20 +158,20 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: build-output/*.apk
-          tag_name: v${{ steps.version.outputs.version_name }}-armv7a-${{ steps.version.outputs.build_timestamp }}
-          name: RikkaHub v${{ steps.version.outputs.version_name }} - ARM V7a
+          tag_name: v${{ steps.version.outputs.version_name }}-universal-${{ steps.version.outputs.build_timestamp }}
+          name: RikkaHub v${{ steps.version.outputs.version_name }} - Universal
           draft: ${{ github.event.inputs.release_type == 'draft' }}
           prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
           body: |
-            # RikkaHub ARM V7a Build
+            # RikkaHub Universal Build
             
             **Version:** v${{ steps.version.outputs.version_name }} (Code: ${{ steps.version.outputs.version_code }})
             **Build Date:** ${{ steps.version.outputs.build_date }}
-            **Architecture:** ARM v7a (32-bit)
+            **Architecture:** arm64-v8a + x86_64
             **Size:** ${{ steps.verify.outputs.apk_size }}
             
             ## About this Build
-            - Optimized for 32-bit ARM v7a devices
+            - Supports both 64-bit ARM and x86 architectures
             - Built from commit: ${{ github.sha }}
             
             ## Installation
@@ -181,14 +181,13 @@ jobs:
             4. Tap the APK file to install
             
             ## Supported Devices
-            - **CPU:** ARM v7a (32-bit) processors
+            - **CPU:** arm64-v8a or x86_64 (64-bit) processors
             - **Android Version:** 8.0+ (API Level 26+)
-            - **Memory:** 2GB+ recommended
             
             ## Features
-            - Full feature parity with universal build
-            - Optimized binary size for 32-bit devices
-            - Stable on older mid-range Android devices
+            - Full feature support
+            - Optimized for modern 64-bit devices
+            - Better performance on recent Android phones
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -196,13 +195,13 @@ jobs:
         if: always()
         run: |
           {
-            echo "## 📦 ARM V7a Build Summary"
+            echo "## 📦 Universal Build Summary"
             echo ""
             echo "| Item | Value |"
             echo "|------|-------|"
             echo "| Version | v${{ steps.version.outputs.version_name }} |"
             echo "| Build Date | ${{ steps.version.outputs.build_date }} |"
-            echo "| Architecture | ARM v7a (32-bit) |"
+            echo "| Architecture | arm64-v8a + x86_64 (64-bit) |"
             echo "| Status | ${{ job.status }} |"
             
             if [ -n "${{ steps.verify.outputs.apk_size }}" ]; then

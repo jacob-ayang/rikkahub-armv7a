@@ -11,3 +11,17 @@ local.properties
 .cursor
 .history
 .kotlin
+
+# Workflow configuration (sensitive files)
+.keystore_base64
+.signing_config
+.google_services_json
+*.jks
+*.key
+app/app.key
+
+# Build artifacts
+build-output/
+all-builds/
+release-files/
+*.apknode_modules/

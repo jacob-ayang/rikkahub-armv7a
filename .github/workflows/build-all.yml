@@ -1,0 +1,263 @@
+name: Build All Variants
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (draft/prerelease/release)'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+          - draft
+          - prerelease
+          - release
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  build-all:
+    runs-on: ubuntu-latest
+    name: Build All Variants
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: armv7
+            apk_pattern: "*armv7*release*.apk"
+            display_name: "ARM V7a (32-bit)"
+          - flavor: universal
+            apk_pattern: "*universal*release*.apk"
+            display_name: "Universal (64-bit)"
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 36
+          ndk-version: 27.0.11902837
+
+      - name: Validate build configuration
+        id: validate
+        run: |
+          echo "Validating build prerequisites for ${{ matrix.display_name }}..."
+          
+          # Check for required secrets
+          if [ -z "${{ secrets.KEY_BASE64 }}" ] || [ -z "${{ secrets.SIGNING_CONFIG }}" ] || [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "ERROR: Missing required secrets (KEY_BASE64, SIGNING_CONFIG, GOOGLE_SERVICES_JSON)"
+            exit 1
+          fi
+          
+          echo "✓ All required secrets are configured"
+          echo "validation_passed=true" >> $GITHUB_OUTPUT
+
+      - name: Prepare signing credentials
+        if: steps.validate.outputs.validation_passed == 'true'
+        run: |
+          # Decode and store keystore
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+          
+          # Create local.properties with signing config
+          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          
+          # Create google-services.json
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          
+          echo "✓ Build credentials prepared"
+
+      - name: Extract version information
+        id: version
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
+          VERSION_CODE=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts | head -1)
+          BUILD_TIMESTAMP=$(date -u +'%Y%m%d_%H%M%S')
+          BUILD_DATE=$(date -u +'%Y-%m-%d')
+          
+          echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "version_code=${VERSION_CODE}" >> $GITHUB_OUTPUT
+          echo "build_timestamp=${BUILD_TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+
+      - name: Build ${{ matrix.display_name }}
+        run: |
+          chmod +x gradlew
+          ./gradlew clean assemble${{ matrix.flavor }}Release \
+            -Pandroid.injected.build.model=full \
+            -Porg.gradle.jvmargs="-Xmx4096m" \
+            --stacktrace
+        env:
+          GRADLE_OPTS: "-Xmx4096m -XX:+UseG1GC"
+
+      - name: Verify build output
+        id: verify
+        run: |
+          echo "Verifying ${{ matrix.display_name }} build outputs..."
+          
+          # Find the generated APK
+          APK_PATH=$(find app/build/outputs/apk -name "${{ matrix.apk_pattern }}" -type f | head -1)
+          
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: APK not found for ${{ matrix.display_name }}"
+            echo "Available outputs:"
+            find app/build/outputs -type f -name "*.apk" || true
+            exit 1
+          fi
+          
+          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+          APK_NAME=$(basename "$APK_PATH")
+          
+          echo "✓ APK found: $APK_NAME ($APK_SIZE)"
+          echo "apk_path=${APK_PATH}" >> $GITHUB_OUTPUT
+          echo "apk_name=${APK_NAME}" >> $GITHUB_OUTPUT
+          echo "apk_size=${APK_SIZE}" >> $GITHUB_OUTPUT
+
+      - name: Rename and organize artifacts
+        id: artifacts
+        run: |
+          mkdir -p build-output
+          
+          APK_PATH="${{ steps.verify.outputs.apk_path }}"
+          NEW_NAME="rikkahub-${{ steps.version.outputs.version_name }}-${{ matrix.flavor }}-${{ steps.version.outputs.build_timestamp }}.apk"
+          
+          cp "$APK_PATH" "build-output/$NEW_NAME"
+          
+          echo "✓ APK renamed: $NEW_NAME"
+          echo "artifact_name=${NEW_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: rikkahub-${{ matrix.flavor }}-${{ steps.version.outputs.version_name }}
+          path: build-output/
+          retention-days: 30
+          if-no-files-found: error
+
+  create-release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build-all
+    runs-on: ubuntu-latest
+    name: Create Release
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-builds
+
+      - name: Extract version information
+        id: version
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
+          BUILD_TIMESTAMP=$(date -u +'%Y%m%d_%H%M%S')
+          BUILD_DATE=$(date -u +'%Y-%m-%d')
+          
+          echo "version_name=${VERSION_NAME}" >> $GITHUB_OUTPUT
+          echo "build_timestamp=${BUILD_TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "build_date=${BUILD_DATE}" >> $GITHUB_OUTPUT
+
+      - name: Organize artifacts for release
+        run: |
+          mkdir -p release-files
+          
+          # Copy all APK files to release directory
+          find all-builds -name "*.apk" -type f -exec cp {} release-files/ \;
+          
+          echo "Files prepared for release:"
+          ls -lh release-files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-files/*.apk
+          tag_name: v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.build_timestamp }}
+          name: RikkaHub v${{ steps.version.outputs.version_name }}
+          draft: ${{ github.event.inputs.release_type == 'draft' }}
+          prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
+          body: |
+            # RikkaHub v${{ steps.version.outputs.version_name }}
+            
+            **Build Date:** ${{ steps.version.outputs.build_date }}
+            **Build ID:** ${{ github.run_id }}
+            
+            ## 📦 Available Builds
+            
+            ### 32-bit (ARM V7a)
+            - For older and budget Android devices
+            - Smaller file size
+            - Compatible with ARM v7a processors
+            
+            ### 64-bit (Universal)
+            - For modern Android devices
+            - Better performance
+            - Supports both ARM v8a and x86_64
+            
+            ## 📱 Installation
+            
+            1. Download the appropriate APK for your device:
+               - If your device is older or budget model → Choose **armv7**
+               - If your device is modern → Choose **universal**
+            2. Transfer the APK to your Android device
+            3. Go to **Settings > Security > Unknown Sources** and enable it
+            4. Open file manager and tap the APK to install
+            
+            ## ℹ️ System Requirements
+            
+            **ARM V7a (32-bit):**
+            - Processor: ARM v7a
+            - Android: 8.0+ (API 26+)
+            - RAM: 2GB+
+            
+            **Universal (64-bit):**
+            - Processor: ARM v8a or x86_64
+            - Android: 8.0+ (API 26+)
+            - RAM: 3GB+
+            
+            ## 🔍 What's New
+            
+            See the commit history for detailed changes:
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish release summary
+        run: |
+          {
+            echo "## ✅ Release Created Successfully"
+            echo ""
+            echo "**Version:** v${{ steps.version.outputs.version_name }}"
+            echo "**Build Date:** ${{ steps.version.outputs.build_date }}"
+            echo "**Release Type:** ${{ github.event.inputs.release_type }}"
+            echo ""
+            echo "### 📦 Available APKs"
+            echo ""
+            ls -lh release-files/ | tail -n +2 | awk '{printf "- `%s` (%s)\n", $9, $5}'
+          } >> $GITHUB_STEP_SUMMARY
+
+  cleanup:
+    if: always()
+    runs-on: ubuntu-latest
+    needs: [build-all]
+    
+    steps:
+      - name: Cleanup
+        run: |
+          echo "Build workflow completed"
