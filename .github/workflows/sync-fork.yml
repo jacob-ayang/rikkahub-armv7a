@@ -183,7 +183,7 @@ jobs:
   trigger-build:
     needs: sync-fork
     runs-on: ubuntu-latest
-    if: needs.sync-fork.outputs.upstream_tag != '' || needs.sync-fork.outputs.has_changes == 'true'
+    if: needs.sync-fork.outputs.upstream_tag != ''
     
     steps:
       - name: Trigger Build ARM V7
@@ -191,8 +191,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const releaseType = needs.sync-fork.outputs.upstream_tag ? 'release' : 'draft';
-            console.log(`Triggering build-armv7 with release_type: ${releaseType}`);
+            console.log('Triggering build-armv7 in release mode');
             
             const workflow = await github.rest.actions.getWorkflow({
               owner: context.repo.owner,
@@ -206,7 +205,7 @@ jobs:
               workflow_id: workflow.data.id,
               ref: 'master',
               inputs: {
-                release_type: releaseType
+                release_type: 'release'
               }
             });
             
