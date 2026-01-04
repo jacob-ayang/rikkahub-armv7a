@@ -2,8 +2,8 @@ name: Sync Fork with Auto Release
 
 on:
   schedule:
-    # 每天凌晨 UTC 时间检查 upstream 更新
-    - cron: '0 0 * * *'
+    # 每5天北京时间 15:30（UTC 07:30）检查 upstream 更新
+    - cron: '30 7 */5 * *'
   workflow_dispatch:
     inputs:
       force_prerelease:
