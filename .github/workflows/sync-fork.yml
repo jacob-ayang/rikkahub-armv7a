@@ -1,16 +1,10 @@
-name: Sync Fork with Auto Release
+name: Sync Fork
 
 on:
   schedule:
     # 每5天北京时间 15:30（UTC 07:30）检查 upstream 更新
     - cron: '30 7 */5 * *'
   workflow_dispatch:
-    inputs:
-      force_prerelease:
-        description: 'Force create prerelease even without upstream changes'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -19,10 +13,6 @@ permissions:
 jobs:
   sync-fork:
     runs-on: ubuntu-latest
-    outputs:
-      has_changes: ${{ steps.check_changes.outputs.has_changes }}
-      upstream_tag: ${{ steps.check_release.outputs.upstream_tag }}
-      new_version: ${{ steps.bump_version.outputs.new_version }}
     
     steps:
       - name: Checkout code
@@ -117,7 +107,7 @@ jobs:
 
       - name: Bump version for prerelease
         id: bump_version
-        if: steps.check_changes.outputs.has_changes == 'true' || github.event.inputs.force_prerelease == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           # 获取当前版本
           CURRENT_VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
@@ -146,196 +136,3 @@ jobs:
             git push origin master
             echo "✅ Version bumped to $NEW_VERSION (code: $NEW_CODE)"
           fi
-
-  create-prerelease:
-    needs: sync-fork
-    runs-on: ubuntu-latest
-    if: needs.sync-fork.outputs.has_changes == 'true'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: master
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: gradle
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 36
-          ndk-version: 27.0.11902837
-
-      - name: Prepare signing credentials
-        run: |
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
-          cat > local.properties << 'EOF'
-          storeFile=rikkahub.keystore
-          storePassword=rikkahub@123
-          keyAlias=rikkahub
-          keyPassword=rikkahub@123
-          EOF
-
-      - name: Build prerelease APK
-        run: |
-          chmod +x gradlew
-          echo "Building ARM V7 Prerelease APK..."
-          ./gradlew assembleArmv7Release -x test -x lint
-
-      - name: Verify APK file
-        id: verify
-        run: |
-          ARMV7_APK=$(find app/build/outputs/apk/armv7/release -name "*.apk" | head -1)
-          
-          if [ -z "$ARMV7_APK" ]; then
-            echo "ERROR: ARM V7 APK file not found"
-            exit 1
-          fi
-          
-          echo "armv7_apk=$ARMV7_APK" >> $GITHUB_OUTPUT
-
-      - name: Create prerelease
-        uses: ncipollo/release-action@v1
-        with:
-          tag: v${{ needs.sync-fork.outputs.new_version }}-prerelease
-          name: Prerelease v${{ needs.sync-fork.outputs.new_version }}
-          prerelease: true
-          draft: false
-          body: |
-            ## Prerelease v${{ needs.sync-fork.outputs.new_version }}
-            
-            Automatically created from upstream sync.
-            
-            **Type:** Prerelease (unstable)
-            **Based on:** Upstream changes merged
-            
-            ### APK Files
-            - **ARM V7a (32-bit)** - For older Android devices (API 26+)
-            
-            ⚠️ This is a prerelease version. It may contain bugs. Use at your own risk.
-            
-            For stable releases, wait for official upstream releases.
-          artifacts: |
-            ${{ steps.verify.outputs.armv7_apk }}
-          allowUpdates: true
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -f rikkahub.keystore local.properties
-          echo "✅ Cleaned up sensitive files"
-
-  sync-release:
-    needs: sync-fork
-    runs-on: ubuntu-latest
-    if: needs.sync-fork.outputs.upstream_tag != ''
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Sync upstream release
-        id: sync_release
-        run: |
-          UPSTREAM_TAG="${{ needs.sync-fork.outputs.upstream_tag }}"
-          
-          # 检查本地是否已有该 tag
-          if git rev-parse "$UPSTREAM_TAG" 2>/dev/null; then
-            echo "Tag $UPSTREAM_TAG already exists locally"
-            echo "already_exists=true" >> $GITHUB_OUTPUT
-          else
-            # 创建本地 tag
-            git fetch upstream refs/tags/$UPSTREAM_TAG:refs/tags/$UPSTREAM_TAG
-            git push origin refs/tags/$UPSTREAM_TAG
-            echo "already_exists=false" >> $GITHUB_OUTPUT
-            echo "✅ Synced upstream release tag: $UPSTREAM_TAG"
-          fi
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: gradle
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 36
-          ndk-version: 27.0.11902837
-
-      - name: Prepare signing credentials
-        run: |
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
-          cat > local.properties << 'EOF'
-          storeFile=rikkahub.keystore
-          storePassword=rikkahub@123
-          keyAlias=rikkahub
-          keyPassword=rikkahub@123
-          EOF
-
-      - name: Build release APK
-        run: |
-          chmod +x gradlew
-          echo "Building ARM V7 Release APK for ${{ needs.sync-fork.outputs.upstream_tag }}..."
-          ./gradlew assembleArmv7Release -x test -x lint
-
-      - name: Verify APK file
-        id: verify
-        run: |
-          ARMV7_APK=$(find app/build/outputs/apk/armv7/release -name "*.apk" | head -1)
-          
-          if [ -z "$ARMV7_APK" ]; then
-            echo "ERROR: ARM V7 APK file not found"
-            exit 1
-          fi
-          
-          echo "armv7_apk=$ARMV7_APK" >> $GITHUB_OUTPUT
-
-      - name: Create release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ needs.sync-fork.outputs.upstream_tag }}
-          name: Release ${{ needs.sync-fork.outputs.upstream_tag }}
-          prerelease: false
-          draft: false
-          body: |
-            ## Release ${{ needs.sync-fork.outputs.upstream_tag }}
-            
-            Synchronized from upstream: https://github.com/rikkahub/rikkahub/releases/tag/${{ needs.sync-fork.outputs.upstream_tag }}
-            
-            **Type:** Official Release (stable)
-            **Based on:** Upstream official release
-            
-            ### APK Files
-            - **ARM V7a (32-bit)** - For older Android devices (API 26+)
-              - Architecture: armeabi-v7a
-            
-            ### Installation
-            1. Download the APK for your device
-            2. Enable installation from unknown sources
-            3. Install the APK
-            
-            For upstream changelog and details, see: https://github.com/rikkahub/rikkahub/releases/tag/${{ needs.sync-fork.outputs.upstream_tag }}
-          artifacts: |
-            ${{ steps.verify.outputs.armv7_apk }}
-          allowUpdates: true
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -f rikkahub.keystore local.properties
-          echo "✅ Cleaned up sensitive files"
