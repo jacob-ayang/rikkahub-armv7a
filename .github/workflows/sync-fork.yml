@@ -2,8 +2,8 @@ name: Sync Fork
 
 on:
   schedule:
-    # 每5天北京时间 15:30（UTC 07:30）检查 upstream 更新
-    - cron: '30 7 */5 * *'
+    # 每天北京时间 15:30（UTC 07:30）检查 upstream 更新
+    - cron: '30 7 * * *'
   workflow_dispatch:
 
 permissions:
