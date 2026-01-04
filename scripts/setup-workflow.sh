@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Workflow Configuration Assistant
-# 此脚本帮助快速配置 GitHub Actions Secrets
+# 此脚本帮助快速准备 GitHub Actions Secret
 
 set -e
 
@@ -27,17 +27,22 @@ prompt_input() {
     echo "$response"
 }
 
-echo -e "${BLUE}Note: google-services.json will be read from app/ directory${NC}"
-echo -e "${BLUE}      Only signing configuration is needed!${NC}"
+echo -e "${BLUE}Note: Only ONE secret is needed: KEY_BASE64${NC}"
+echo -e "${BLUE}      Other configurations are automated!${NC}"
 echo ""
 
 # Check if keystore exists
-echo -e "${YELLOW}Step 1: Keystore Configuration${NC}"
+echo -e "${YELLOW}Step 1: Generate KEY_BASE64 Secret${NC}"
 echo ""
 
-KEYSTORE_FILE=$(prompt_input "Enter keystore file path (or press Enter to skip): ")
+KEYSTORE_FILE=$(prompt_input "Enter keystore file path (default: rikkahub.jks): ")
 
-if [ -n "$KEYSTORE_FILE" ] && [ -f "$KEYSTORE_FILE" ]; then
+# Use default if empty
+if [ -z "$KEYSTORE_FILE" ]; then
+    KEYSTORE_FILE="rikkahub.jks"
+fi
+
+if [ -f "$KEYSTORE_FILE" ]; then
     echo -e "${GREEN}✓ Keystore found: $KEYSTORE_FILE${NC}"
     
     # Generate Base64
@@ -70,31 +75,6 @@ else
     exit 1
 fi
 
-# Signing configuration
-echo ""
-echo -e "${YELLOW}Step 2: Signing Configuration${NC}"
-echo ""
-
-STORE_PASSWORD=$(prompt_input "Enter keystore password: ")
-KEY_ALIAS=$(prompt_input "Enter key alias: ")
-KEY_PASSWORD=$(prompt_input "Enter key password: ")
-
-SIGNING_CONFIG="storeFile=app/app.key
-storePassword=${STORE_PASSWORD}
-keyAlias=${KEY_ALIAS}
-keyPassword=${KEY_PASSWORD}"
-
-echo ""
-echo -e "${BLUE}=== SIGNING_CONFIG ===${NC}"
-echo "$SIGNING_CONFIG"
-echo -e "${BLUE}=======================${NC}"
-echo ""
-echo -e "${YELLOW}Save this value as GitHub Secret: SIGNING_CONFIG${NC}"
-
-# Save to file
-echo "$SIGNING_CONFIG" > .signing_config
-echo -e "${GREEN}✓ Also saved to: .signing_config${NC}"
-
 # Summary and instructions
 echo ""
 echo ""
@@ -106,13 +86,10 @@ echo -e "${BLUE}Next Steps:${NC}"
 echo ""
 echo "1. Go to your GitHub repository"
 echo "2. Navigate to: Settings > Secrets and variables > Actions"
-echo "3. Click 'New repository secret' and add these two secrets:"
+echo "3. Click 'New repository secret' and add this secret:"
 echo ""
 echo -e "   ${YELLOW}Secret Name: KEY_BASE64${NC}"
 echo "   Value: [content from .keystore_base64]"
-echo ""
-echo -e "   ${YELLOW}Secret Name: SIGNING_CONFIG${NC}"
-echo "   Value: [content from .signing_config]"
 echo ""
 echo "4. Trigger a workflow:"
 echo "   - Go to Actions tab"
