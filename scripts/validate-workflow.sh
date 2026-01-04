@@ -140,7 +140,6 @@ echo ""
 IGNORE_ENTRIES=(
     ".keystore_base64"
     ".signing_config"
-    ".google_services_json"
     "*.jks"
     "app/app.key"
 )
@@ -155,6 +154,19 @@ done
 
 echo ""
 
+# Check google-services.json
+echo -e "${YELLOW}Checking google-services.json...${NC}"
+echo ""
+
+if [ -f "$PROJECT_ROOT/app/google-services.json" ]; then
+    echo -e "${GREEN}✓${NC} app/google-services.json found"
+else
+    echo -e "${RED}✗${NC} app/google-services.json not found (required)"
+    VALIDATION_PASSED=false
+fi
+
+echo ""
+
 # Local configuration check
 echo -e "${YELLOW}Checking Local Configuration...${NC}"
 echo ""
@@ -163,12 +175,6 @@ if [ -f "$PROJECT_ROOT/local.properties" ]; then
     echo -e "${YELLOW}⚠${NC} local.properties exists (should not be committed)"
 else
     echo -e "${GREEN}✓${NC} local.properties not found (good, should be local only)"
-fi
-
-if [ -f "$PROJECT_ROOT/app/google-services.json" ]; then
-    echo -e "${YELLOW}⚠${NC} app/google-services.json exists (should not be committed)"
-else
-    echo -e "${GREEN}✓${NC} app/google-services.json not found (good, should be local only)"
 fi
 
 echo ""
@@ -201,15 +207,19 @@ if [ "$VALIDATION_PASSED" = true ]; then
     echo ""
     echo -e "${BLUE}Next Steps:${NC}"
     echo ""
-    echo "1. Configure GitHub Secrets:"
+    echo "1. Configure GitHub Secrets (only 2 required!):"
     echo "   ./scripts/setup-workflow.sh"
     echo ""
-    echo "2. Test with manual trigger:"
+    echo "2. Add these Secrets to GitHub:"
+    echo "   - KEY_BASE64"
+    echo "   - SIGNING_CONFIG"
+    echo ""
+    echo "3. Test with manual trigger:"
     echo "   - Go to GitHub Actions"
     echo "   - Select a workflow"
     echo "   - Click 'Run workflow'"
     echo ""
-    echo "3. Monitor build progress in Actions tab"
+    echo "4. Monitor build progress in Actions tab"
     echo ""
     echo -e "${BLUE}Documentation:${NC}"
     echo "   - Quick Start: QUICK_START_ARMV7.md"

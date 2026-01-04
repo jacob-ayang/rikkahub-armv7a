@@ -61,12 +61,18 @@ jobs:
           echo "Validating ARM V7 build prerequisites..."
           
           # Check for required secrets
-          if [ -z "${{ secrets.KEY_BASE64 }}" ] || [ -z "${{ secrets.SIGNING_CONFIG }}" ] || [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            echo "ERROR: Missing required secrets (KEY_BASE64, SIGNING_CONFIG, GOOGLE_SERVICES_JSON)"
+          if [ -z "${{ secrets.KEY_BASE64 }}" ] || [ -z "${{ secrets.SIGNING_CONFIG }}" ]; then
+            echo "ERROR: Missing required secrets (KEY_BASE64, SIGNING_CONFIG)"
             exit 1
           fi
           
-          echo "✓ All required secrets are configured"
+          # Check if google-services.json exists in repo
+          if [ ! -f "app/google-services.json" ]; then
+            echo "ERROR: app/google-services.json not found"
+            exit 1
+          fi
+          
+          echo "✓ All required configuration found"
           echo "validation_passed=true" >> $GITHUB_OUTPUT
 
       - name: Prepare signing credentials
@@ -77,9 +83,6 @@ jobs:
           
           # Create local.properties with signing config
           echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          
-          # Create google-services.json
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
           
           echo "✓ Build credentials prepared"
 

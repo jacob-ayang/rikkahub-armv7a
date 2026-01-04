@@ -27,6 +27,10 @@ prompt_input() {
     echo "$response"
 }
 
+echo -e "${BLUE}Note: google-services.json will be read from app/ directory${NC}"
+echo -e "${BLUE}      Only signing configuration is needed!${NC}"
+echo ""
+
 # Check if keystore exists
 echo -e "${YELLOW}Step 1: Keystore Configuration${NC}"
 echo ""
@@ -91,32 +95,6 @@ echo -e "${YELLOW}Save this value as GitHub Secret: SIGNING_CONFIG${NC}"
 echo "$SIGNING_CONFIG" > .signing_config
 echo -e "${GREEN}✓ Also saved to: .signing_config${NC}"
 
-# Google Services JSON
-echo ""
-echo -e "${YELLOW}Step 3: Google Services Configuration${NC}"
-echo ""
-
-GOOGLE_SERVICES_JSON=$(prompt_input "Enter path to google-services.json (or press Enter to skip): ")
-
-if [ -n "$GOOGLE_SERVICES_JSON" ] && [ -f "$GOOGLE_SERVICES_JSON" ]; then
-    echo -e "${GREEN}✓ google-services.json found${NC}"
-    
-    GOOGLE_SERVICES_CONTENT=$(cat "$GOOGLE_SERVICES_JSON")
-    
-    echo ""
-    echo -e "${BLUE}=== GOOGLE_SERVICES_JSON ===${NC}"
-    echo "$GOOGLE_SERVICES_CONTENT"
-    echo -e "${BLUE}==============================${NC}"
-    echo ""
-    echo -e "${YELLOW}Save this value as GitHub Secret: GOOGLE_SERVICES_JSON${NC}"
-    
-    # Save to file
-    echo "$GOOGLE_SERVICES_CONTENT" > .google_services_json
-    echo -e "${GREEN}✓ Also saved to: .google_services_json${NC}"
-else
-    echo -e "${YELLOW}ℹ Skipping google-services.json configuration${NC}"
-fi
-
 # Summary and instructions
 echo ""
 echo ""
@@ -128,16 +106,13 @@ echo -e "${BLUE}Next Steps:${NC}"
 echo ""
 echo "1. Go to your GitHub repository"
 echo "2. Navigate to: Settings > Secrets and variables > Actions"
-echo "3. Click 'New repository secret' and add these three secrets:"
+echo "3. Click 'New repository secret' and add these two secrets:"
 echo ""
 echo -e "   ${YELLOW}Secret Name: KEY_BASE64${NC}"
 echo "   Value: [content from .keystore_base64]"
 echo ""
 echo -e "   ${YELLOW}Secret Name: SIGNING_CONFIG${NC}"
 echo "   Value: [content from .signing_config]"
-echo ""
-echo -e "   ${YELLOW}Secret Name: GOOGLE_SERVICES_JSON${NC}"
-echo "   Value: [content from .google_services_json]"
 echo ""
 echo "4. Trigger a workflow:"
 echo "   - Go to Actions tab"
@@ -146,19 +121,21 @@ echo "   - Click 'Run workflow'"
 echo "   - Select release type (draft/prerelease/release)"
 echo "   - Click 'Run workflow'"
 echo ""
-echo -e "${BLUE}Important Security Notes:${NC}"
+echo -e "${BLUE}Important Notes:${NC}"
+echo ""
+echo "✓ google-services.json is automatically read from app/ directory"
+echo "✓ Only need 2 Secrets instead of 3!"
 echo ""
 echo "⚠  The following temporary files were created for convenience:"
 echo "   - .keystore_base64"
 echo "   - .signing_config"
-echo "   - .google_services_json"
 echo ""
 echo "   These files contain sensitive information. Do NOT commit them!"
 echo ""
 echo "✓ The .gitignore should exclude these files."
 echo "✓ After adding secrets to GitHub, you can delete these files:"
 echo ""
-echo "   rm -f .keystore_base64 .signing_config .google_services_json"
+echo "   rm -f .keystore_base64 .signing_config"
 echo ""
 echo -e "${BLUE}Workflow Documentation:${NC}"
 echo ""

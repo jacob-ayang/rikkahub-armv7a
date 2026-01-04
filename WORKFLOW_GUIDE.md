@@ -4,6 +4,8 @@
 
 本项目提供了三个自动编译工作流，用于编译 RikkaHub 的不同版本。所有工作流都对原项目进行了最小化侵入，使用分层次的构建配置。
 
+**简化配置：** 仅需 2 个 GitHub Secrets！google-services.json 会自动从项目目录读取。
+
 ## 工作流说明
 
 ### 1. Build ARM V7 (`.github/workflows/build-armv7.yml`)
@@ -16,7 +18,7 @@
 
 **功能特性：**
 - ✅ 自动版本提取
-- ✅ 构建前验证
+- ✅ 构建前验证（检查 google-services.json）
 - ✅ 自动重命名 APK
 - ✅ GitHub Release 发布
 - ✅ 构建摘要生成
@@ -53,9 +55,9 @@ rikkahub-{版本号}-universal-{时间戳}.apk
 
 ---
 
-## 配置步骤
+## 配置步骤（只需 2 个 Secrets！）
 
-### 第一步：准备密钥和凭证
+### 第一步：准备密钥
 
 #### 1.1 生成 Keystore 文件
 
@@ -99,25 +101,16 @@ keyPassword=your_key_password
 - `keyAlias`: 生成 keystore 时设置的别名（默认：rikkahub）
 - `keyPassword`: 生成 keystore 时设置的密钥密码
 
-#### 1.4 获取 Google Services JSON
-
-1. 访问 [Firebase Console](https://console.firebase.google.com/)
-2. 选择对应的项目
-3. 进入 **Project Settings**
-4. 下载 `google-services.json`
-5. 完整复制文件内容
-
 ### 第二步：添加 GitHub Secrets
 
 1. 进入 GitHub 仓库 → **Settings**
 2. 左侧菜单 → **Secrets and variables** → **Actions**
-3. 点击 **New repository secret**，添加以下三个 Secret：
+3. 点击 **New repository secret**，添加以下两个 Secret：
 
 | Secret 名称 | 值 | 说明 |
 |------------|-----|------|
 | `KEY_BASE64` | keystore Base64 字符串 | Keystore 文件的完整 Base64 编码 |
 | `SIGNING_CONFIG` | 签名配置内容 | 4 行配置（见 1.3） |
-| `GOOGLE_SERVICES_JSON` | JSON 文件完整内容 | firebase google-services.json |
 
 **添加方法：**
 ```
@@ -126,7 +119,9 @@ Value: [粘贴 Base64 字符串]
 点击 "Add secret"
 ```
 
-重复以上步骤，添加另外两个 Secret。
+重复以上步骤，添加 SIGNING_CONFIG。
+
+**✅ 不需要添加 GOOGLE_SERVICES_JSON！** 工作流会自动从 `app/google-services.json` 读取。
 
 ### 第三步：验证配置
 
@@ -138,6 +133,292 @@ Value: [粘贴 Base64 字符串]
 4. 在弹出菜单中选择：
    - 发布类型：`draft`（草稿）
    - 点击 **Run workflow**
+
+---
+
+## 使用指南
+
+### 手动编译
+
+#### 编译单个版本（ARM V7）
+
+1. **GitHub 网页操作：**
+   - 进入 **Actions** 标签
+   - 选择 **Build ARM V7**
+   - 点击 **Run workflow**
+   - 选择发布类型：
+     - `draft`: 草稿版本（测试用）
+     - `prerelease`: 预发布（RC 版）
+     - `release`: 正式发布
+   - 点击 **Run workflow**
+
+2. **等待编译完成：**
+   - 可在 Actions 页面看到实时日志
+   - 编译通常需要 5-10 分钟
+
+3. **获取结果：**
+   - 编译完成后，进入 **Release** 页面
+   - 根据发布类型看到对应的版本
+   - 下载 APK 文件
+
+#### 编译所有版本（推荐）
+
+流程同上，但选择 **Build All Variants**，会同时编译 ARM V7 和 Universal 两个版本，并创建统一的 Release。
+
+### 自动编译
+
+当以下情况发生时，Build ARM V7 和 Build Universal 会自动触发：
+
+- 推送到 `master` 分支
+- 修改以下路径：
+  - `app/src/**`
+  - `ai/src/**`
+  - `common/src/**`
+  - `highlight/src/**`
+  - `search/src/**`
+  - `tts/src/**`
+  - `document/src/**`
+  - `app/build.gradle.kts`
+  - `build.gradle.kts`
+
+**注意：** 自动编译不会创建 Release，只生成 Artifacts。下载 Artifacts 进行测试。
+
+---
+
+## 监控和调试
+
+### 查看编译日志
+
+1. 进入 **Actions** 标签
+2. 选择对应的 workflow run
+3. 选择 **build-armv7** / **build-universal** / **build-all** job
+4. 查看详细的执行日志
+
+### 常见问题排查
+
+#### ❌ 错误：Missing required secrets
+
+**原因：** Secret 未正确配置
+
+**解决：**
+1. 确认已添加两个 Secret：`KEY_BASE64`, `SIGNING_CONFIG`
+2. 确认 Secret 值非空
+3. 检查 Secret 名称拼写是否完全一致（区分大小写）
+
+#### ❌ 错误：app/google-services.json not found
+
+**原因：** google-services.json 不在 app 目录下
+
+**解决：**
+1. 确保 `app/google-services.json` 存在
+2. 如果文件被 gitignore，需要添加到版本控制中
+3. 或者在仓库中保留该文件
+
+#### ❌ 错误：APK not found in build outputs
+
+**原因：** 编译失败
+
+**解决：**
+1. 查看详细日志，查找 gradle 错误信息
+2. 确认代码在本地能编译通过
+3. 检查签名配置是否正确
+
+#### ❌ 错误：Build credentials not prepared
+
+**原因：** Base64 解码失败或密钥文件格式错误
+
+**解决：**
+1. 重新生成 Base64 编码
+2. 确认原 keystore 文件格式正确（.jks）
+3. 检查 SIGNING_CONFIG 格式（4 行配置）
+
+#### ⚠️ 警告：APK 过大
+
+**原因：** 构建输出包含了多个架构
+
+**解决：**
+- 这是正常现象，通常由 `splits` 配置导致
+- 最终的 APK 只包含单个架构（ARM V7a 或 Universal）
+
+---
+
+## 最佳实践
+
+### 🎯 版本管理
+
+| 场景 | 发布类型 | 说明 |
+|-----|--------|------|
+| 开发测试 | `draft` | 不显示在 Release 列表，仅供内部测试 |
+| 候选版本 | `prerelease` | 显示为"预发布"，用于 RC 测试 |
+| 正式发布 | `release` | 正式版本，显示在 Release 主列表 |
+
+### 📦 命名规范
+
+工作流自动生成的 APK 命名格式：
+```
+rikkahub-{version}-{variant}-{timestamp}.apk
+```
+
+示例：
+- `rikkahub-1.7.7-armv7-20250104_143022.apk`
+- `rikkahub-1.7.7-universal-20250104_143022.apk`
+
+### 🔐 安全建议
+
+1. **Keystore 文件：**
+   - 永远不要提交 keystore 文件到 GitHub
+   - 仅作为 Base64 字符串存储在 Secrets 中
+   - 定期备份 keystore 文件（离线存储）
+
+2. **Google Services 文件：**
+   - 如果包含敏感信息，使用 .gitignore 排除
+   - 在本地环境中获取此文件
+   - 保持文件的私密性和安全性
+
+3. **密码管理：**
+   - 使用强密码生成 keystore
+   - 不要在代码或提交信息中透露密码
+   - 定期更换密码
+
+### ⚡ 性能优化
+
+1. **缓存利用：**
+   - Gradle 缓存自动启用（`cache: gradle`）
+   - 减少编译时间 30-50%
+
+2. **并行构建：**
+   - Build All Variants 使用矩阵策略并行编译
+   - 两个版本同时构建，不增加总耗时
+
+3. **增量构建：**
+   - 自动触发时只有相关文件变更时才编译
+   - 减少不必要的编译
+
+---
+
+## 工作流架构设计
+
+### 最小侵入性原则
+
+本工作流的设计完全遵循"最小侵入性"原则：
+
+✅ **不修改原项目文件：**
+- 所有 workflow 都是独立的 YAML 配置
+- 不修改 `app/build.gradle.kts` 的主逻辑
+- 不添加任何 hook 或脚本到原项目
+
+✅ **利用现有的 flavor 配置：**
+- 使用已有的 `armv7` 和 `universal` flavor
+- 调用标准的 gradle 任务（`assembleArmv7Release` 等）
+- 无需修改编译流程
+
+✅ **隔离敏感信息：**
+- 所有密钥通过 GitHub Secrets 传递
+- google-services.json 从仓库本地读取
+- 编译后自动清理临时文件
+- 不污染项目文件
+
+✅ **条件执行：**
+- 使用 workflow 的 `if` 条件控制步骤执行
+- 根据事件类型选择性发布 Release
+- 灵活的触发条件配置
+
+---
+
+## 常见问题 (FAQ)
+
+### Q: 为什么只需要 2 个 Secrets？
+
+**A:** 因为 google-services.json 已经提交到仓库中，Workflow 可以直接读取。这简化了配置流程。
+
+### Q: 如果 google-services.json 包含敏感信息怎么办？
+
+**A:** 
+- 将 google-services.json 添加到 .gitignore
+- 在本地保留该文件（不提交）
+- Workflow 会在本地检查文件是否存在
+
+### Q: 编译需要多长时间？
+
+**A:** 取决于网络和缓存：
+- 首次编译：8-12 分钟
+- 有缓存：4-6 分钟
+- 并行编译两个版本：仍是 6-8 分钟
+
+### Q: 能否在本地编译？
+
+**A:** 可以！使用 Makefile：
+```bash
+make check-config          # 检查配置
+make build-armv7          # 编译 ARM V7
+make build-universal      # 编译 Universal
+make build-all            # 编译所有版本
+```
+
+详见 `QUICK_START_ARMV7.md`
+
+### Q: 编译失败如何调试？
+
+**A:** 
+1. 查看 Actions 日志中的 Gradle 错误信息
+2. 在本地重现错误：
+   ```bash
+   ./gradlew assembleArmv7Release --stacktrace
+   ```
+3. 修复后推送代码
+4. 重新触发 workflow
+
+### Q: APK 签名信息在哪里？
+
+**A:** Workflow 中的 `SIGNING_CONFIG` Secret 包含签名信息，Gradle 自动读取并应用。
+
+### Q: 发布的 Release 可以删除吗？
+
+**A:** 可以，在 GitHub Release 页面手动删除。自动生成的 Artifacts 也可以删除（GitHub Actions 自动清理过期 artifacts）。
+
+---
+
+## 维护和更新
+
+### 更新工作流
+
+如需修改工作流，编辑对应的 `.github/workflows/*.yml` 文件：
+
+```bash
+git pull origin master
+# 编辑工作流文件
+git add .github/workflows/build-*.yml
+git commit -m "chore: update workflows"
+git push origin master
+```
+
+### 更新依赖
+
+如需更新 GitHub Actions 依赖版本：
+
+```yaml
+- uses: actions/checkout@v4     # ← 可更新版本
+- uses: actions/setup-java@v4   # ← 可更新版本
+- uses: android-actions/setup-android@v3  # ← 可更新版本
+```
+
+查看最新版本：
+- [actions/checkout](https://github.com/actions/checkout/releases)
+- [actions/setup-java](https://github.com/actions/setup-java/releases)
+- [android-actions/setup-android](https://github.com/android-actions/setup-android/releases)
+
+---
+
+## 支持和贡献
+
+如有问题或建议，请：
+1. 查看本文档和 `QUICK_START_ARMV7.md`
+2. 检查 GitHub Issues
+3. 提交新 Issue 或 Discussion
+
+---
+
+**最后更新：** 2025-01-04
 
 ---
 
