@@ -13,6 +13,10 @@ permissions:
 jobs:
   sync-fork:
     runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check_changes.outputs.has_changes }}
+      upstream_tag: ${{ steps.check_release.outputs.upstream_tag }}
+      upstream_version: ${{ steps.sync_upstream_version.outputs.new_version }}
     
     steps:
       - name: Checkout code
@@ -136,3 +140,74 @@ jobs:
             git push origin master
             echo "✅ Version bumped to $NEW_VERSION (code: $NEW_CODE)"
           fi
+
+      - name: Sync upstream release version
+        id: sync_upstream_version
+        if: steps.check_release.outputs.upstream_tag != ''
+        run: |
+          UPSTREAM_TAG="${{ steps.check_release.outputs.upstream_tag }}"
+          
+          # 从 tag 中提取版本号（移除 v 前缀）
+          UPSTREAM_VERSION="${UPSTREAM_TAG#v}"
+          
+          echo "upstream_tag=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
+          echo "new_version=$UPSTREAM_VERSION" >> $GITHUB_OUTPUT
+          
+          # 获取当前版本
+          CURRENT_VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
+          CURRENT_CODE=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts | head -1)
+          
+          echo "Current version: $CURRENT_VERSION"
+          echo "Upstream version: $UPSTREAM_VERSION"
+          
+          # 检查是否需要更新
+          if [ "$CURRENT_VERSION" != "$UPSTREAM_VERSION" ]; then
+            NEW_CODE=$((CURRENT_CODE + 1))
+            
+            echo "Syncing to upstream version: $UPSTREAM_VERSION (code: $NEW_CODE)"
+            
+            # 更新 build.gradle.kts
+            sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" app/build.gradle.kts
+            sed -i "s/versionName = \"$CURRENT_VERSION\"/versionName = \"$UPSTREAM_VERSION\"/" app/build.gradle.kts
+            
+            # 提交版本更新
+            git add app/build.gradle.kts
+            git commit -m "chore: sync version to upstream $UPSTREAM_VERSION"
+            git push origin master
+            
+            echo "✅ Version synced to $UPSTREAM_VERSION (code: $NEW_CODE)"
+          else
+            echo "✅ Already at upstream version $UPSTREAM_VERSION"
+          fi
+
+  trigger-build:
+    needs: sync-fork
+    runs-on: ubuntu-latest
+    if: needs.sync-fork.outputs.upstream_tag != '' || needs.sync-fork.outputs.has_changes == 'true'
+    
+    steps:
+      - name: Trigger Build ARM V7
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const releaseType = needs.sync-fork.outputs.upstream_tag ? 'release' : 'draft';
+            console.log(`Triggering build-armv7 with release_type: ${releaseType}`);
+            
+            const workflow = await github.rest.actions.getWorkflow({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-armv7.yml'
+            });
+            
+            const dispatch = await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: workflow.data.id,
+              ref: 'master',
+              inputs: {
+                release_type: releaseType
+              }
+            });
+            
+            console.log(`✅ Build workflow triggered with status: ${dispatch.status}`);
