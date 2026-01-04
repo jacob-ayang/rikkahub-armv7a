@@ -1,0 +1,182 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.8.0)'
+        required: true
+        type: string
+      release_type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+          - release
+          - prerelease
+          - draft
+        default: 'release'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    name: Create Release v${{ github.event.inputs.version }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        id: validate
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: Invalid version format: $VERSION (expected X.Y.Z)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "✓ Version format valid: $VERSION"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 36
+          ndk-version: 27.0.11902837
+
+      - name: Validate build configuration
+        run: |
+          echo "Validating release configuration..."
+          
+          # Check for required secrets
+          if [ -z "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "ERROR: Missing required secret (KEY_BASE64)"
+            exit 1
+          fi
+          
+          # Check if google-services.json exists
+          if [ ! -f "app/google-services.json" ]; then
+            echo "ERROR: app/google-services.json not found"
+            exit 1
+          fi
+          
+          echo "✓ All required configuration found"
+
+      - name: Prepare signing credentials
+        run: |
+          # Decode and store keystore in project root
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
+          
+          # Create local.properties with signing config
+          cat > local.properties << 'EOF'
+          storeFile=rikkahub.keystore
+          storePassword=rikkahub@123
+          keyAlias=rikkahub
+          keyPassword=rikkahub@123
+          EOF
+          
+          echo "✓ Build credentials prepared"
+
+      - name: Build APK for release
+        run: |
+          chmod +x gradlew
+          
+          echo "Building ARM V7 Release APK..."
+          ./gradlew assembleArmv7Release -x test -x lint
+          
+          echo "Building Universal Release APK..."
+          ./gradlew assembleUniversalRelease -x test -x lint
+
+      - name: Verify APK files
+        id: verify
+        run: |
+          echo "Verifying build outputs..."
+          
+          ARMV7_APK=$(find app/build/outputs/apk/armv7/release -name "*.apk" | head -1)
+          UNIVERSAL_APK=$(find app/build/outputs/apk/universal/release -name "*.apk" | head -1)
+          
+          if [ -z "$ARMV7_APK" ] || [ -z "$UNIVERSAL_APK" ]; then
+            echo "ERROR: APK files not found"
+            exit 1
+          fi
+          
+          echo "armv7_apk=$ARMV7_APK" >> $GITHUB_OUTPUT
+          echo "universal_apk=$UNIVERSAL_APK" >> $GITHUB_OUTPUT
+          
+          echo "✓ APK files verified:"
+          echo "  ARM V7: $(basename $ARMV7_APK)"
+          echo "  Universal: $(basename $UNIVERSAL_APK)"
+
+      - name: Create Release
+        id: create_release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.validate.outputs.version }}
+          name: Release v${{ steps.validate.outputs.version }}
+          body: |
+            ## Release v${{ steps.validate.outputs.version }}
+            
+            ### APK Files
+            - **ARM V7a (32-bit)** - rikkahub-armv7-release-${{ steps.validate.outputs.version }}.apk
+              - For older Android devices (API 26+)
+              - Architecture: armeabi-v7a
+            
+            - **Universal (64-bit)** - rikkahub-universal-release-${{ steps.validate.outputs.version }}.apk
+              - For modern Android devices (API 26+)
+              - Architectures: arm64-v8a, x86_64
+            
+            ### Installation
+            1. Download the appropriate APK file for your device
+            2. Enable installation from unknown sources
+            3. Install the APK file
+            
+            ### Changelog
+            See commits between versions for detailed changes.
+            
+            ### Build Information
+            - Build Date: ${{ github.event.repository.updated_at }}
+            - Compiled with: Android Gradle Plugin 8.x
+            - Kotlin: Latest (configured in gradle.properties)
+            - Min SDK: 26, Target SDK: 36
+          draft: ${{ github.event.inputs.release_type == 'draft' }}
+          prerelease: ${{ github.event.inputs.release_type == 'prerelease' }}
+          artifacts: |
+            ${{ steps.verify.outputs.armv7_apk }}
+            ${{ steps.verify.outputs.universal_apk }}
+          allowUpdates: true
+          replacesArtifacts: false
+
+      - name: Cleanup sensitive files
+        if: always()
+        run: |
+          rm -f rikkahub.keystore
+          rm -f local.properties
+          rm -f .keystore_base64
+          echo "✓ Sensitive files cleaned"
+
+      - name: Release Summary
+        run: |
+          echo "========================================="
+          echo "Release Created Successfully!"
+          echo "========================================="
+          echo ""
+          echo "Version: v${{ steps.validate.outputs.version }}"
+          echo "Type: ${{ github.event.inputs.release_type }}"
+          echo "Release URL: ${{ steps.create_release.outputs.html_url }}"
+          echo ""
+          echo "Next steps:"
+          echo "1. Visit: ${{ steps.create_release.outputs.html_url }}"
+          echo "2. Review and publish the release"
+          echo "3. Download APK files from the release page"
