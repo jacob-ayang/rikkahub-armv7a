@@ -78,7 +78,8 @@ android {
                 if (storeFilePath != null && storePasswordValue != null &&
                     keyAliasValue != null && keyPasswordValue != null
                 ) {
-                    storeFile = file(storeFilePath)
+                    // Resolve path relative to project root, not app module
+                    storeFile = rootProject.file(storeFilePath)
                     storePassword = storePasswordValue
                     keyAlias = keyAliasValue
                     keyPassword = keyPasswordValue
