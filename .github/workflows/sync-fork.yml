@@ -40,7 +40,7 @@ jobs:
         run: |
           git remote add upstream https://github.com/rikkahub/rikkahub.git || true
           # 获取 upstream master 分支和 tags（忽略 tag 冲突）
-          git fetch upstream master --tags 2>&1 || true
+          git fetch upstream +refs/heads/master:refs/remotes/upstream/master --tags 2>&1 || true
           echo "=== Upstream master ===" 
           git log --oneline -1 upstream/master
 
