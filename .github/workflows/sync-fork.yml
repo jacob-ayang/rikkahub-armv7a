@@ -121,12 +121,18 @@ jobs:
           
           # 检查是否需要更新
           if [ "$CURRENT_VERSION" != "$UPSTREAM_VERSION" ]; then
-            NEW_CODE=$((CURRENT_CODE + 1))
+            # 从上游 checkout 同步 versionCode（直接使用上游的值）
+            UPSTREAM_CODE=$(git show upstream/master:app/build.gradle.kts | grep -oP 'versionCode = \K[0-9]+' | head -1)
             
-            echo "Syncing to upstream version: $UPSTREAM_VERSION (code: $NEW_CODE)"
+            if [ -z "$UPSTREAM_CODE" ]; then
+              echo "⚠️  Could not extract versionCode from upstream, skipping version sync"
+              exit 0
+            fi
+            
+            echo "Syncing to upstream version: $UPSTREAM_VERSION (code: $UPSTREAM_CODE)"
             
             # 更新 build.gradle.kts
-            sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" app/build.gradle.kts
+            sed -i "s/versionCode = $CURRENT_CODE/versionCode = $UPSTREAM_CODE/" app/build.gradle.kts
             sed -i "s/versionName = \"$CURRENT_VERSION\"/versionName = \"$UPSTREAM_VERSION\"/" app/build.gradle.kts
             
             # 提交版本更新
@@ -134,7 +140,7 @@ jobs:
             git commit -m "chore: sync version to upstream $UPSTREAM_VERSION"
             git push origin master
             
-            echo "✅ Version synced to $UPSTREAM_VERSION (code: $NEW_CODE)"
+            echo "✅ Version synced to $UPSTREAM_VERSION (code: $UPSTREAM_CODE)"
           else
             echo "✅ Already at upstream version $UPSTREAM_VERSION"
           fi
