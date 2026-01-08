@@ -55,7 +55,9 @@ android {
             // AppBundle tasks usually contain "bundle" in their name
             //noinspection WrongGradleMethod
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
-            isEnable = !isBuildingBundle && gradle.startParameter.projectProperties["build.universal"] != "false"
+            // Disable splits for armv7 flavor (to ensure armv7a-only APK)
+            val isArmv7Build = gradle.startParameter.taskNames.any { it.lowercase().contains("armv7") }
+            isEnable = !isBuildingBundle && !isArmv7Build && gradle.startParameter.projectProperties["build.universal"] != "false"
             reset()
             include("arm64-v8a", "x86_64")
             isUniversalApk = true
