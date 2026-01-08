@@ -12,6 +12,14 @@ on:
           - draft
           - prerelease
           - release
+      build_universal:
+        description: 'Build universal APK (include other ABIs)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
   push:
     branches:
       - master
@@ -109,7 +117,15 @@ jobs:
       - name: Build ARM V7a Release APK
         run: |
           chmod +x gradlew
+          if [ -n "${{ github.event.inputs.build_universal }}" ]; then
+            BUILD_UNIVERSAL="${{ github.event.inputs.build_universal }}"
+          else
+            BUILD_UNIVERSAL=false
+          fi
+          echo "BUILD_UNIVERSAL=$BUILD_UNIVERSAL" >> $GITHUB_ENV
+
           ./gradlew clean assembleArmv7Release \
+            -Pbuild.universal=$BUILD_UNIVERSAL \
             -Pandroid.injected.build.model=full \
             -Porg.gradle.jvmargs="-Xmx4096m" \
             --stacktrace

@@ -166,6 +166,8 @@ jobs:
               ref: 'master',
               inputs: {
                 release_type: 'release'
+                ,
+                build_universal: 'false'
               }
             });
             
