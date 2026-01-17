@@ -46,6 +46,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
@@ -55,14 +56,17 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -91,16 +95,17 @@ import androidx.core.net.toFile
 import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import com.composables.icons.lucide.ArrowUp
-import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.BookOpen
+import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Eraser
+import com.composables.icons.lucide.FileArchive
 import com.composables.icons.lucide.FileAudio
 import com.composables.icons.lucide.Files
 import com.composables.icons.lucide.Fullscreen
-import com.composables.icons.lucide.GraduationCap
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Music
+import com.composables.icons.lucide.Package2
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.X
@@ -108,6 +113,7 @@ import com.composables.icons.lucide.Zap
 import com.dokar.sonner.ToastType
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
+import kotlinx.coroutines.Job
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
@@ -122,9 +128,9 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.InjectionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
+import me.rerere.rikkahub.ui.components.ui.RandomGridLoading
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
@@ -157,6 +163,7 @@ fun ChatInput(
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onClearContext: () -> Unit,
+    onCompressContext: (additionalPrompt: String, targetTokens: Int) -> Job,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
     onLongSendClick: () -> Unit,
@@ -362,6 +369,7 @@ fun ChatInput(
                             state = state,
                             assistant = assistant,
                             onClearContext = onClearContext,
+                            onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
                             onDismiss = { dismissExpand() }
                         )
@@ -699,12 +707,14 @@ private fun FilesPicker(
     assistant: Assistant,
     state: ChatInputState,
     onClearContext: () -> Unit,
+    onCompressContext: (additionalPrompt: String, targetTokens: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     onDismiss: () -> Unit
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
     var showInjectionSheet by remember { mutableStateOf(false) }
+    var showCompressDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -780,6 +790,24 @@ private fun FilesPicker(
             )
         }
 
+        // Compress History Button
+        ListItem(
+            leadingContent = {
+                Icon(
+                    imageVector = Lucide.Package2,
+                    contentDescription = stringResource(R.string.chat_page_compress_context),
+                )
+            },
+            headlineContent = {
+                Text(stringResource(R.string.chat_page_compress_context))
+            },
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.large)
+                .clickable {
+                    showCompressDialog = true
+                },
+        )
+
         ListItem(
             leadingContent = {
                 Icon(
@@ -823,6 +851,19 @@ private fun FilesPicker(
             settings = settings,
             onUpdateAssistant = onUpdateAssistant,
             onDismiss = { showInjectionSheet = false }
+        )
+    }
+
+    // Compress Context Dialog
+    if (showCompressDialog) {
+        CompressContextDialog(
+            onDismiss = {
+                showCompressDialog = false
+                onDismiss()
+            },
+            onConfirm = { additionalPrompt, targetTokens ->
+                onCompressContext(additionalPrompt, targetTokens)
+            }
         )
     }
 }
@@ -1275,3 +1316,4 @@ private fun BigIconTextButtonPreview() {
         ) {}
     }
 }
+

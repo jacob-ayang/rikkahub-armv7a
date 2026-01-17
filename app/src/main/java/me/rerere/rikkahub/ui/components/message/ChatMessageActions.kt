@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -21,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,8 +58,10 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.utils.copyMessageToClipboard
+import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import me.rerere.rikkahub.utils.toLocalString
 import java.util.Locale
 
@@ -74,6 +78,7 @@ fun ColumnScope.ChatMessageActionButtons(
     val context = LocalContext.current
     var isPendingDelete by remember { mutableStateOf(false) }
     var showTranslateDialog by remember { mutableStateOf(false) }
+    var showRegenerateConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(isPendingDelete) {
         if (isPendingDelete) {
@@ -97,13 +102,14 @@ fun ColumnScope.ChatMessageActionButtons(
         Icon(
             Lucide.RefreshCw, stringResource(R.string.regenerate), modifier = Modifier
                 .clip(CircleShape)
-                .clickable { onRegenerate() }
+                .clickable { showRegenerateConfirm = true }
                 .padding(8.dp)
                 .size(16.dp)
         )
 
         if (message.role == MessageRole.ASSISTANT) {
             val tts = LocalTTSState.current
+            val settings = LocalSettings.current
             val isSpeaking by tts.isSpeaking.collectAsState()
             val isAvailable by tts.isAvailable.collectAsState()
             Icon(
@@ -117,7 +123,13 @@ fun ColumnScope.ChatMessageActionButtons(
                         indication = LocalIndication.current,
                         onClick = {
                             if (!isSpeaking) {
-                                tts.speak(message.toText())
+                                val text = message.toText()
+                                val textToSpeak = if (settings.displaySetting.ttsOnlyReadQuoted) {
+                                    text.extractQuotedContentAsText() ?: text
+                                } else {
+                                    text
+                                }
+                                tts.speak(textToSpeak)
                             } else {
                                 tts.stop()
                             }
@@ -184,6 +196,30 @@ fun ColumnScope.ChatMessageActionButtons(
             onDismissRequest = {
                 showTranslateDialog = false
             },
+        )
+    }
+
+    // Regenerate confirmation dialog
+    if (showRegenerateConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRegenerateConfirm = false },
+            title = { Text(stringResource(R.string.regenerate)) },
+            text = { Text(stringResource(R.string.regenerate_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRegenerateConfirm = false
+                        onRegenerate()
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRegenerateConfirm = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
         )
     }
 }
