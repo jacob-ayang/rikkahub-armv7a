@@ -757,5 +757,11 @@
   <string name="chat_message_tool_deny_dialog_title">ツール実行を拒否</string>
   <string name="chat_message_tool_deny_dialog_hint">理由（任意）</string>
   <string name="setting_mcp_page_needs_approval">承認が必要</string>
+  <string name="prompt_page_role_user">ユーザー（システムタグでラップ）</string>
+  <string name="prompt_page_role_assistant">アシスタント（プリフィル）</string>
+  <string name="prompt_page_injection_role">インジェクションロール</string>
+  <string name="rikkahub_provider_description">公式の無料AIサービスです。ユーザーのスポンサー資金を使い、新規ユーザーのためのフォールバック用の一部無料モデルを提供します。APIキーは不要です。厳しいレート制限があります。独自のプロバイダーを購入済みの場合は、可能な限りそちらをご利用ください。</string>
+  <string name="chat_page_compress_keep_recent">最近のメッセージを保持</string>
+  <string name="chat_page_compress_not_enough_messages">圧縮するためのメッセージが不足しています。保持するメッセージ数を減らすか、メッセージを追加してください。</string>
 </resources>
 
