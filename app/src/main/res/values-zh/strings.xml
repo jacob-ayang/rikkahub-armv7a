@@ -765,5 +765,21 @@
   <string name="chat_page_compress_not_enough_messages">消息数量不足，无法压缩。请减少保留的消息数量或添加更多消息。</string>
   <string name="setting_display_page_send_on_enter_title">按Enter发送</string>
   <string name="setting_display_page_send_on_enter_desc">按 Enter 发送消息而非换行</string>
+  <string name="chain_of_thought_collapse">收起</string>
+  <string name="chain_of_thought_show_more_steps">再显示 %d 步</string>
+  <string name="assistant_page_global_memory">全局记忆</string>
+  <string name="assistant_page_global_memory_desc">使用全局共享内存而非助手隔离内存。启用后，所有助手共享同一内存存储</string>
+  <string name="assistant_page_local_tools_time_info_title">时间信息</string>
+  <string name="assistant_page_local_tools_time_info_desc">从设备获取当前日期、星期、时间和时区信息</string>
+  <string name="notification_channel_chat_live_update">聊天生成进度</string>
+  <string name="notification_live_update_title">正在生成回复…</string>
+  <string name="notification_live_update_thinking">思考中…</string>
+  <string name="notification_live_update_tool">正在运行工具：%s</string>
+  <string name="notification_live_update_writing">正在编写回复…</string>
+  <string name="notification_live_update_chip_thinking">思考中</string>
+  <string name="notification_live_update_chip_tool">工具</string>
+  <string name="notification_live_update_chip_writing">正在书写</string>
+  <string name="setting_display_page_live_update_notification">实时更新通知</string>
+  <string name="setting_display_page_live_update_notification_desc">在生成消息时显示实时通知更新（Android 15+）</string>
 </resources>
 

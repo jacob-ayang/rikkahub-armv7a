@@ -3,6 +3,8 @@ package me.rerere.rikkahub
 import android.app.Application
 import android.util.Log
 import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.runtime.Composer
+import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
@@ -29,6 +31,7 @@ import org.koin.core.context.startKoin
 private const val TAG = "RikkaHubApp"
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
+const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -55,6 +58,8 @@ class RikkaHubApp : Application() {
             setDefaultsAsync(R.xml.remote_config_defaults)
             fetchAndActivate()
         }
+
+        // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
 
     private fun deleteTempFiles() {
@@ -77,6 +82,16 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(true)
             .build()
         notificationManager.createNotificationChannel(chatCompletedChannel)
+
+        val chatLiveUpdateChannel = NotificationChannelCompat
+            .Builder(
+                CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_LOW
+            )
+            .setName(getString(R.string.notification_channel_chat_live_update))
+            .setVibrationEnabled(false)
+            .build()
+        notificationManager.createNotificationChannel(chatLiveUpdateChannel)
     }
 
     override fun onTerminate() {

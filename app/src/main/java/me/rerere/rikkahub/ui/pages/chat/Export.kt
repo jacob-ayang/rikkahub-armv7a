@@ -40,12 +40,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +61,7 @@ import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Wrench
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
@@ -73,7 +74,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
-import me.rerere.ai.ui.toSortedMessageParts
 import me.rerere.ai.util.encodeBase64
 import me.rerere.common.android.appTempFolder
 import me.rerere.highlight.Highlighter
@@ -82,15 +82,19 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.ui.components.message.MessagePartBlock
+import me.rerere.rikkahub.ui.components.message.ThinkingStep
+import me.rerere.rikkahub.ui.components.message.groupMessageParts
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.BitmapComposer
+import me.rerere.rikkahub.ui.components.ui.ChainOfThought
+import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import com.dokar.sonner.rememberToasterState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
-import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.exportImage
 import me.rerere.rikkahub.utils.getActivity
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
@@ -245,7 +249,7 @@ private fun exportToMarkdown(
         messages.forEach { message ->
             val role = if (message.role == MessageRole.USER) "**User**" else "**Assistant**"
             append("$role:\n\n")
-            message.parts.toSortedMessageParts().forEach { part ->
+            message.parts.forEach { part ->
                 when (part) {
                     is UIMessagePart.Text -> {
                         append(part.text)
@@ -447,6 +451,7 @@ private fun ExportedChatImage(
     }
 }
 
+@Suppress("DEPRECATION")
 @Composable
 private fun ExportedChatMessage(
     message: UIMessage,
@@ -464,6 +469,7 @@ private fun ExportedChatMessage(
         model?.displayName?.isNotBlank() == true -> model.displayName
         else -> "AI"
     }
+    val groupedParts = remember(message.parts) { message.parts.groupMessageParts() }
     val messageContent: @Composable () -> Unit = {
         Column(
             modifier = Modifier
@@ -472,57 +478,87 @@ private fun ExportedChatMessage(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start
         ) {
-            message.parts.toSortedMessageParts().forEach { part ->
-                when (part) {
-                    is UIMessagePart.Text -> {
-                        if (part.text.isNotBlank()) {
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = when (message.role) {
-                                        MessageRole.USER -> MaterialTheme.colorScheme.primaryContainer
-                                        else -> Color.Transparent
+            groupedParts.forEach { block ->
+                when (block) {
+                    is MessagePartBlock.ThinkingBlock -> {
+                        if (block.steps.isNotEmpty()) {
+                            ChainOfThought(
+                                steps = block.steps,
+                                collapsedVisibleCount = block.steps.size
+                            ) { step ->
+                                when (step) {
+                                    is ThinkingStep.ReasoningStep -> {
+                                        ExportedReasoningStep(
+                                            reasoning = step.reasoning,
+                                            expanded = options.expandReasoning
+                                        )
                                     }
-                                )
-                            ) {
-                                ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
-                                    MarkdownBlock(
-                                        content = part.text,
-                                        modifier = Modifier.padding(12.dp)
-                                    )
+
+                                    is ThinkingStep.ToolStep -> {
+                                        ExportedToolStep(
+                                            tool = step.tool
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    is UIMessagePart.Image -> {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context)
-                                .data(part.url)
-                                .allowHardware(false)
-                                .crossfade(false)
-                                .build(),
-                            contentDescription = "Image",
-                            modifier = Modifier
-                                .sizeIn(maxHeight = 300.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                        )
-                    }
+                    is MessagePartBlock.ContentBlock -> {
+                        when (val part = block.part) {
+                            is UIMessagePart.Text -> {
+                                if (part.text.isNotBlank()) {
+                                    ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
+                                        if (message.role == MessageRole.USER) {
+                                            Card(
+                                                shape = MaterialTheme.shapes.medium,
+                                            ) {
+                                                MarkdownBlock(
+                                                    content = part.text,
+                                                    modifier = Modifier.padding(8.dp)
+                                                )
+                                            }
+                                        } else {
+                                            if (settings.displaySetting.showAssistantBubble) {
+                                                Card(
+                                                    shape = MaterialTheme.shapes.medium,
+                                                    colors = CardDefaults.cardColors(
+                                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                                    )
+                                                ) {
+                                                    MarkdownBlock(
+                                                        content = part.text,
+                                                        modifier = Modifier.padding(8.dp)
+                                                    )
+                                                }
+                                            } else {
+                                                MarkdownBlock(
+                                                    content = part.text,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
-                    is UIMessagePart.Reasoning -> {
-                        ExportedReasoningCard(reasoning = part, expanded = options.expandReasoning)
-                    }
+                            is UIMessagePart.Image -> {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(part.url)
+                                        .allowHardware(false)
+                                        .crossfade(false)
+                                        .build(),
+                                    contentDescription = "Image",
+                                    modifier = Modifier
+                                        .sizeIn(maxHeight = 300.dp)
+                                        .clip(RoundedCornerShape(12.dp)),
+                                )
+                            }
 
-                    is UIMessagePart.ToolCall -> {
-                        ExportedToolCall(toolCall = part)
-                    }
-
-                    is UIMessagePart.ToolResult -> {
-                        ExportedToolResult(toolResult = part)
-                    }
-
-                    else -> {
-                        // Other parts are not rendered in image export for now
+                            else -> {
+                                // Other parts are not rendered in image export for now
+                            }
+                        }
                     }
                 }
             }
@@ -553,154 +589,112 @@ private fun ExportedChatMessage(
 }
 
 @Composable
-private fun ExportedReasoningCard(reasoning: UIMessagePart.Reasoning, expanded: Boolean) {
+private fun ChainOfThoughtScope.ExportedReasoningStep(
+    reasoning: UIMessagePart.Reasoning,
+    expanded: Boolean
+) {
     val duration = reasoning.finishedAt?.let { endTime ->
         endTime - reasoning.createdAt
     } ?: (kotlin.time.Clock.System.now() - reasoning.createdAt)
 
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.deepthink),
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.secondary
-                )
+    ControlledChainOfThoughtStep(
+        expanded = expanded,
+        onExpandedChange = {},
+        icon = {
+            Icon(
+                painter = painterResource(R.drawable.deepthink),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.secondary
+            )
+        },
+        label = {
+            Text(
+                text = stringResource(R.string.deep_thinking),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        },
+        extra = if (duration > 0.seconds) {
+            {
                 Text(
-                    text = stringResource(R.string.deep_thinking),
-                    style = MaterialTheme.typography.titleSmall,
+                    text = duration.toString(DurationUnit.SECONDS, 1),
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
-                if (duration > 0.seconds) {
-                    Text(
-                        text = "(${duration.toString(DurationUnit.SECONDS, 1)})",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                }
             }
-            if (expanded) {
-                MarkdownBlock(
-                    content = reasoning.reasoning,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
-                )
-            }
+        } else {
+            null
+        },
+        contentVisible = expanded,
+        content = {
+            MarkdownBlock(
+                content = reasoning.reasoning,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-    }
+    )
 }
 
 @Composable
-private fun ExportedToolCall(
-    toolCall: UIMessagePart.ToolCall
+private fun ChainOfThoughtScope.ExportedToolStep(
+    tool: UIMessagePart.Tool
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)
-        ) {
-            Icon(
-                imageVector = when (toolCall.toolName) {
-                    "create_memory", "edit_memory" -> Lucide.BookHeart
-                    "delete_memory" -> Lucide.BookDashed
-                    "search_web" -> Lucide.Earth
-                    "scrape_web" -> Lucide.Earth
-                    else -> Lucide.Wrench
-                },
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-            )
-            Column {
-                Text(
-                    text = when (toolCall.toolName) {
-                        "create_memory" -> stringResource(R.string.chat_message_tool_create_memory)
-                        "edit_memory" -> stringResource(R.string.chat_message_tool_edit_memory)
-                        "delete_memory" -> stringResource(R.string.chat_message_tool_delete_memory)
-                        "search_web" -> {
-                            val query = runCatching {
-                                JsonInstant.parseToJsonElement(toolCall.arguments).jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull
-                                    ?: ""
-                            }.getOrDefault("")
-                            stringResource(R.string.chat_message_tool_search_web, query)
-                        }
-                        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
-                        else -> stringResource(R.string.chat_message_tool_call_generic, toolCall.toolName)
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
+    val memoryAction = runCatching {
+        tool.inputAsJson().jsonObject["action"]?.jsonPrimitiveOrNull?.contentOrNull
+    }.getOrNull()
+    val title = when (tool.toolName) {
+        "memory_tool" -> when (memoryAction) {
+            "create" -> stringResource(R.string.chat_message_tool_create_memory)
+            "edit" -> stringResource(R.string.chat_message_tool_edit_memory)
+            "delete" -> stringResource(R.string.chat_message_tool_delete_memory)
+            else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
         }
-    }
-}
 
-@Composable
-private fun ExportedToolResult(toolResult: UIMessagePart.ToolResult) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp)
-        ) {
+        "search_web" -> {
+            val query = runCatching {
+                tool.inputAsJson().jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+            }.getOrDefault("")
+            stringResource(R.string.chat_message_tool_search_web, query)
+        }
+
+        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
+        else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
+    }
+    ControlledChainOfThoughtStep(
+        expanded = true,
+        onExpandedChange = {},
+        icon = {
             Icon(
-                imageVector = when (toolResult.toolName) {
-                    "create_memory", "edit_memory" -> Lucide.BookHeart
-                    "delete_memory" -> Lucide.BookDashed
-                    "search_web" -> Lucide.Earth
+                imageVector = when (tool.toolName) {
+                    "memory_tool" -> when (memoryAction) {
+                        "create", "edit" -> Lucide.BookHeart
+                        "delete" -> Lucide.BookDashed
+                        else -> Lucide.Wrench
+                    }
+
+                    "search_web" -> Lucide.Search
                     "scrape_web" -> Lucide.Earth
                     else -> Lucide.Wrench
                 },
                 contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.secondary
             )
-            Column {
-                Text(
-                    text = when (toolResult.toolName) {
-                        "create_memory" -> stringResource(R.string.chat_message_tool_create_memory)
-                        "edit_memory" -> stringResource(R.string.chat_message_tool_edit_memory)
-                        "delete_memory" -> stringResource(R.string.chat_message_tool_delete_memory)
-                        "search_web" -> {
-                            val query =
-                                toolResult.arguments.jsonObject["query"]?.jsonPrimitiveOrNull?.contentOrNull
-                                    ?: ""
-                            stringResource(R.string.chat_message_tool_search_web, query)
-                        }
-                        "scrape_web" -> stringResource(R.string.chat_message_tool_scrape_web)
-                        else -> stringResource(R.string.chat_message_tool_call_generic, toolResult.toolName)
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-        }
-    }
+        },
+        label = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        contentVisible = false,
+        content = null,
+    )
 }
 
 private fun shareFile(context: Context, uri: Uri, mimeType: String) {

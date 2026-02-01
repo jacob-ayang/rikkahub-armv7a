@@ -63,6 +63,8 @@
   <string name="assistant_page_invalid_json">Invalid JSON: %s</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">Execute JavaScript code with QuickJS engine for calculations and scripting</string>
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScript Engine</string>
+  <string name="assistant_page_local_tools_time_info_desc">Get current date, weekday, time, and timezone info from the device</string>
+  <string name="assistant_page_local_tools_time_info_title">Time Info</string>
   <string name="assistant_page_manage_memory_title">Manage Memory</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
@@ -765,5 +767,19 @@
   <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep or add more messages.</string>
   <string name="setting_display_page_send_on_enter_title">Send on Enter</string>
   <string name="setting_display_page_send_on_enter_desc">Press Enter to send message instead of adding a new line</string>
+  <string name="chain_of_thought_collapse">Collapse</string>
+  <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
+  <string name="assistant_page_global_memory">Global Memory</string>
+  <string name="assistant_page_global_memory_desc">Use global shared memory instead of assistant-isolated memory. When enabled, all assistants share the same memory storage</string>
+  <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
+  <string name="notification_live_update_title">Generating response...</string>
+  <string name="notification_live_update_thinking">Thinking...</string>
+  <string name="notification_live_update_tool">Running tool: %s</string>
+  <string name="notification_live_update_writing">Writing response...</string>
+  <string name="notification_live_update_chip_thinking">Thinking</string>
+  <string name="notification_live_update_chip_tool">Tool</string>
+  <string name="notification_live_update_chip_writing">Writing</string>
+  <string name="setting_display_page_live_update_notification">Live Update Notification</string>
+  <string name="setting_display_page_live_update_notification_desc">Show real-time notification updates during message generation (Android 15+)</string>
 </resources>
 

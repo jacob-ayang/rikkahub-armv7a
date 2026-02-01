@@ -7,7 +7,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -49,10 +47,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.easteregg.EmojiBurstHost
-import me.rerere.rikkahub.ui.components.ui.icons.DiscordIcon
-import me.rerere.rikkahub.ui.components.ui.icons.TencentQQIcon
 import me.rerere.rikkahub.ui.context.LocalNavController
-import me.rerere.rikkahub.utils.joinQQGroup
 import me.rerere.rikkahub.utils.openUrl
 
 @Composable
@@ -60,7 +55,17 @@ fun SettingAboutPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val context = LocalContext.current
     val navController = LocalNavController.current
-    val emojiOptions = remember { listOf("🎉", "✨", "🌟", "💫", "🎊", "🥳", "🇨🇳", "🤗", "🤡", "🌏", "🍉") }
+    val emojiOptions = remember {
+        listOf(
+            "🎉", "✨", "🌟", "💫", "🎊", "🥳", "🎈", "🎆", "🎇", "🧨",
+            "🌈", "🧧", "🎁", "🍬", "🍭", "🍉", "🍓", "🍒", "🍍", "🥭",
+            "🐱", "🐶", "🦊", "🐼", "🦁", "🐯", "🐵", "🦄",
+            "❤️", "🧡", "💛", "💚", "💙", "💜",
+            "🇨🇳", "🌏", "🌍", "🌎",
+            "🤗", "🤩", "😆", "😺", "😸", "🤡",
+            "💡", "🔥", "💥", "🚀", "⭐", "🌙"
+        )
+    }
     var logoCenterPx by remember { mutableStateOf(Offset.Zero) }
     Scaffold(
         topBar = {
@@ -119,38 +124,6 @@ fun SettingAboutPage() {
                             style = MaterialTheme.typography.displaySmall,
                         )
 
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(
-                                8.dp,
-                                Alignment.CenterHorizontally
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    context.joinQQGroup("wMdqlDETtzIz6o49HrBR2TeQlwcX6RH9")
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = TencentQQIcon,
-                                    contentDescription = "QQ",
-                                    tint = MaterialTheme.colorScheme.secondary
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    context.openUrl("https://discord.gg/9weBqxe5c4")
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = DiscordIcon,
-                                    contentDescription = "Discord",
-                                    tint = MaterialTheme.colorScheme.secondary
-                                )
-                            }
-                        }
                     }
                 }
 
