@@ -6,6 +6,7 @@ import com.whl.quickjs.wrapper.QuickJSObject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -13,6 +14,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.utils.readClipboardText
+import me.rerere.rikkahub.utils.writeClipboardText
 import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
@@ -26,6 +30,10 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("time_info")
     data object TimeInfo : LocalToolOption()
+
+    @Serializable
+    @SerialName("clipboard")
+    data object Clipboard : LocalToolOption()
 }
 
 class LocalTools(private val context: Context) {
@@ -72,7 +80,7 @@ class LocalTools(private val context: Context) {
                 })
                 val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull
                 val result = context.evaluate(code)
-                buildJsonObject {
+                val payload = buildJsonObject {
                     if (logs.isNotEmpty()) {
                         put("logs", JsonPrimitive(logs.joinToString("\n")))
                     }
@@ -83,6 +91,7 @@ class LocalTools(private val context: Context) {
                         }
                     )
                 }
+                listOf(UIMessagePart.Text(payload.toString()))
             }
         )
     }
@@ -104,7 +113,7 @@ class LocalTools(private val context: Context) {
                 val date = now.toLocalDate()
                 val time = now.toLocalTime().withNano(0)
                 val weekday = now.dayOfWeek
-                buildJsonObject {
+                val payload = buildJsonObject {
                     put("year", date.year)
                     put("month", date.monthValue)
                     put("day", date.dayOfMonth)
@@ -118,6 +127,63 @@ class LocalTools(private val context: Context) {
                     put("utc_offset", now.offset.id)
                     put("timestamp_ms", now.toInstant().toEpochMilli())
                 }
+                listOf(UIMessagePart.Text(payload.toString()))
+            }
+        )
+    }
+
+    val clipboardTool by lazy {
+        Tool(
+            name = "clipboard_tool",
+            description = """
+                Read or write plain text from the device clipboard.
+                Use action: read or write. For write, provide text.
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("action", buildJsonObject {
+                            put("type", "string")
+                            put(
+                                "enum",
+                                kotlinx.serialization.json.buildJsonArray {
+                                    add("read")
+                                    add("write")
+                                }
+                            )
+                            put("description", "Operation to perform: read or write")
+                        })
+                        put("text", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Text to write to the clipboard (required for write)")
+                        })
+                    },
+                    required = listOf("action")
+                )
+            },
+            execute = {
+                val params = it.jsonObject
+                val action = params["action"]?.jsonPrimitive?.contentOrNull ?: error("action is required")
+                when (action) {
+                    "read" -> {
+                        val payload = buildJsonObject {
+                            put("text", context.readClipboardText())
+                        }
+                        listOf(UIMessagePart.Text(payload.toString()))
+                    }
+
+                    "write" -> {
+                        val text = params["text"]?.jsonPrimitive?.contentOrNull ?: error("text is required")
+                        context.writeClipboardText(text)
+                        val payload = buildJsonObject {
+                            put("success", true)
+                            put("text", text)
+                        }
+                        listOf(UIMessagePart.Text(payload.toString()))
+                    }
+
+                    else -> error("unknown action: $action, must be one of [read, write]")
+                }
             }
         )
     }
@@ -129,6 +195,9 @@ class LocalTools(private val context: Context) {
         }
         if (options.contains(LocalToolOption.TimeInfo)) {
             tools.add(timeTool)
+        }
+        if (options.contains(LocalToolOption.Clipboard)) {
+            tools.add(clipboardTool)
         }
         return tools
     }
