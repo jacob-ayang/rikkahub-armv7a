@@ -26,12 +26,18 @@
 # keep jlatexmath
 -keep class org.scilab.forge.jlatexmath.** {*;}
 
-# keep Ktor debug detection
--keepclassmembers class io.ktor.util.debug.IntellijIdeaDebugDetector {*;}
+# keep Ktor debug detection and related classes
+-keep class io.ktor.util.debug.** {*;}
+-keep class io.ktor.util.** {*;}
 
-# keep java.lang.management classes used by Ktor
--dontwarn java.lang.management.ManagementFactory
--dontwarn java.lang.management.RuntimeMXBean
+# Ignore warnings about missing classes from Ktor
+-dontwarn java.lang.management.**
+-dontwarn io.ktor.**
+
+# Allow missing annotations from optional dependencies
+-dontwarn kotlin.metadata.**
+-dontwarn org.jetbrains.annotations.**
 
 -dontwarn com.google.re2j.**
 -dontobfuscate
+-ignorewarnings
