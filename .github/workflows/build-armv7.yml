@@ -82,7 +82,7 @@ jobs:
         run: |
           echo "🔐 Preparing signing credentials..."
           
-          # Decode and store keystore in app directory (where Gradle expects it)
+          # Decode and store keystore in project root (not in app/)
           echo "Decoding BASE64 keystore..."
           KEYSTORE_SIZE=$(echo "${{ secrets.KEY_BASE64 }}" | wc -c)
           echo "KEY_BASE64 size: $KEYSTORE_SIZE bytes"
@@ -93,31 +93,30 @@ jobs:
             exit 1
           fi
           
-          # Store in app directory
-          mkdir -p app
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/rikkahub.keystore
+          # Store in project root
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
           
-          if [ ! -f "app/rikkahub.keystore" ] || [ ! -s "app/rikkahub.keystore" ]; then
+          if [ ! -f "rikkahub.keystore" ] || [ ! -s "rikkahub.keystore" ]; then
             echo "❌ ERROR: Keystore file decode failed or empty"
             exit 1
           fi
           
-          DECODED_SIZE=$(stat -f%z app/rikkahub.keystore 2>/dev/null || stat -c%s app/rikkahub.keystore 2>/dev/null)
+          DECODED_SIZE=$(stat -f%z rikkahub.keystore 2>/dev/null || stat -c%s rikkahub.keystore 2>/dev/null)
           echo "✓ Keystore decoded successfully (${DECODED_SIZE} bytes)"
           
-          # Create local.properties with signing config in project root
+          # Create local.properties with signing config
           cat > local.properties << 'EOF'
           ${{ secrets.SIGNING_CONFIG }}
           EOF
           
-          # Ensure the keystore path is relative to project root and points to app directory
-          sed -i 's|storeFile=.*|storeFile=app/rikkahub.keystore|g' local.properties
+          # Ensure the keystore path is set to root directory reference
+          sed -i 's|storeFile=.*|storeFile=rikkahub.keystore|g' local.properties
           
           echo "local.properties content:"
           cat local.properties
           echo ""
           echo "Verifying keystore file:"
-          ls -lh app/rikkahub.keystore
+          ls -lh rikkahub.keystore
           
           echo "✅ Build credentials prepared"
 
