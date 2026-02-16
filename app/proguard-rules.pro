@@ -26,5 +26,12 @@
 # keep jlatexmath
 -keep class org.scilab.forge.jlatexmath.** {*;}
 
+# keep Ktor debug detection
+-keepclassmembers class io.ktor.util.debug.IntellijIdeaDebugDetector {*;}
+
+# keep java.lang.management classes used by Ktor
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
+
 -dontwarn com.google.re2j.**
 -dontobfuscate
