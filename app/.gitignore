@@ -1,4 +1,5 @@
 /build
 /release
-google-services.json
+# google-services.json is now committed to the repository for CI/CD builds
+# google-services.json
 app.key
