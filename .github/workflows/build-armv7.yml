@@ -83,7 +83,25 @@ jobs:
           echo "🔐 Preparing signing credentials..."
           
           # Decode and store keystore in project root
+          echo "Decoding BASE64 keystore..."
+          KEYSTORE_SIZE=$(echo "${{ secrets.KEY_BASE64 }}" | wc -c)
+          echo "KEY_BASE64 size: $KEYSTORE_SIZE bytes"
+          
+          if [ "$KEYSTORE_SIZE" -lt 100 ]; then
+            echo "❌ ERROR: KEY_BASE64 appears to be invalid or too small"
+            echo "Expected at least 3500+ characters, got $KEYSTORE_SIZE"
+            exit 1
+          fi
+          
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
+          
+          if [ ! -f "rikkahub.keystore" ] || [ ! -s "rikkahub.keystore" ]; then
+            echo "❌ ERROR: Keystore file decode failed or empty"
+            exit 1
+          fi
+          
+          DECODED_SIZE=$(stat -f%z rikkahub.keystore 2>/dev/null || stat -c%s rikkahub.keystore 2>/dev/null)
+          echo "✓ Keystore decoded successfully (${DECODED_SIZE} bytes)"
           
           # Use the signing config from secrets
           cat > local.properties << 'EOF'
@@ -92,6 +110,9 @@ jobs:
           
           # Ensure the keystore path is correctly set in local.properties
           sed -i 's|storeFile=.*|storeFile=rikkahub.keystore|g' local.properties
+          
+          echo "local.properties content:"
+          cat local.properties
           
           echo "✅ Build credentials prepared"
 
