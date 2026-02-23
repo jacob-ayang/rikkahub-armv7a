@@ -1,0 +1,367 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    outputs:
+      has_new_commits: ${{ steps.compare.outputs.has_new_commits }}
+      has_new_upstream_release: ${{ steps.release_check.outputs.has_new_upstream_release }}
+      source_ref: ${{ steps.decide.outputs.source_ref }}
+      release_mode: ${{ steps.decide.outputs.release_mode }}
+      upstream_tag: ${{ steps.decide.outputs.upstream_tag }}
+      should_trigger_release: ${{ steps.decide.outputs.should_trigger_release }}
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream master (no tags)
+        run: |
+          git remote add upstream https://github.com/rikkahub/rikkahub.git 2>/dev/null || true
+          git fetch upstream master --no-tags --prune
+
+      - name: Compare master with upstream
+        id: compare
+        run: |
+          set -euo pipefail
+
+          LOCAL_SHA="$(git rev-parse master)"
+          UPSTREAM_SHA="$(git rev-parse upstream/master)"
+
+          HAS_NEW_COMMITS="false"
+          if [ "$LOCAL_SHA" != "$UPSTREAM_SHA" ]; then
+            HAS_NEW_COMMITS="true"
+          fi
+
+          echo "local_sha=$LOCAL_SHA" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+          echo "has_new_commits=$HAS_NEW_COMMITS" >> "$GITHUB_OUTPUT"
+
+      - name: Get latest upstream release tag
+        id: upstream_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const release = await github.rest.repos.getLatestRelease({
+                owner: "rikkahub",
+                repo: "rikkahub",
+              });
+              core.setOutput("tag", release.data.tag_name || "");
+              core.setOutput("published_at", release.data.published_at || "");
+            } catch (error) {
+              if (error.status === 404) {
+                core.setOutput("tag", "");
+                core.setOutput("published_at", "");
+                return;
+              }
+              throw error;
+            }
+
+      - name: Check whether local release already exists
+        id: local_release
+        uses: actions/github-script@v7
+        env:
+          UPSTREAM_TAG: ${{ steps.upstream_release.outputs.tag }}
+        with:
+          script: |
+            const tag = process.env.UPSTREAM_TAG || "";
+            if (!tag) {
+              core.setOutput("exists", "false");
+              return;
+            }
+            try {
+              await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+              core.setOutput("exists", "true");
+            } catch (error) {
+              if (error.status === 404) {
+                core.setOutput("exists", "false");
+                return;
+              }
+              throw error;
+            }
+
+      - name: Evaluate upstream release state
+        id: release_check
+        run: |
+          set -euo pipefail
+
+          HAS_NEW_UPSTREAM_RELEASE="false"
+          UPSTREAM_TAG="${{ steps.upstream_release.outputs.tag }}"
+          LOCAL_RELEASE_EXISTS="${{ steps.local_release.outputs.exists }}"
+
+          if [ -n "$UPSTREAM_TAG" ] && [ "$LOCAL_RELEASE_EXISTS" != "true" ]; then
+            HAS_NEW_UPSTREAM_RELEASE="true"
+          fi
+
+          echo "has_new_upstream_release=$HAS_NEW_UPSTREAM_RELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Find existing upstream sync PR
+        if: steps.compare.outputs.has_new_commits == 'true'
+        id: find_pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              base: "master",
+              per_page: 100,
+            });
+
+            const existing = pulls.find((pr) => {
+              const sameRepo = pr.head?.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
+              const syncBranch = pr.head?.ref?.startsWith("sync/upstream-");
+              return sameRepo && syncBranch;
+            });
+
+            if (existing) {
+              core.setOutput("number", String(existing.number));
+              core.setOutput("branch", existing.head.ref);
+            } else {
+              core.setOutput("number", "");
+              core.setOutput("branch", "");
+            }
+
+      - name: Prepare sync branch and merge upstream
+        if: steps.compare.outputs.has_new_commits == 'true'
+        id: merge
+        run: |
+          set -euo pipefail
+
+          UPSTREAM_SHA="${{ steps.compare.outputs.upstream_sha }}"
+          EXISTING_BRANCH="${{ steps.find_pr.outputs.branch }}"
+
+          if [ -n "$EXISTING_BRANCH" ]; then
+            SYNC_BRANCH="$EXISTING_BRANCH"
+          else
+            SYNC_BRANCH="sync/upstream-$(date -u +'%Y%m%d-%H%M')-${UPSTREAM_SHA:0:7}"
+          fi
+
+          if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1; then
+            git fetch origin "$SYNC_BRANCH"
+            git checkout -B "$SYNC_BRANCH" "origin/$SYNC_BRANCH"
+          else
+            git checkout -B "$SYNC_BRANCH" master
+          fi
+
+          BEFORE_SHA="$(git rev-parse HEAD)"
+
+          set +e
+          git merge --no-ff --no-edit upstream/master
+          MERGE_EXIT="$?"
+          set -e
+
+          if [ "$MERGE_EXIT" -ne 0 ]; then
+            if git ls-files -u | grep -q '.'; then
+              echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
+              echo "merge_conflict=true" >> "$GITHUB_OUTPUT"
+              echo "branch_updated=false" >> "$GITHUB_OUTPUT"
+              echo "ERROR: Merge conflicts detected between master and upstream/master"
+              exit 1
+            fi
+            exit "$MERGE_EXIT"
+          fi
+
+          AFTER_SHA="$(git rev-parse HEAD)"
+          BRANCH_UPDATED="false"
+          if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+            BRANCH_UPDATED="true"
+          fi
+
+          git push origin "$SYNC_BRANCH" --force-with-lease
+
+          echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
+          echo "branch_updated=$BRANCH_UPDATED" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update sync PR
+        if: steps.compare.outputs.has_new_commits == 'true' && steps.merge.outputs.merge_conflict != 'true'
+        id: sync_pr
+        uses: actions/github-script@v7
+        env:
+          SYNC_BRANCH: ${{ steps.merge.outputs.sync_branch }}
+          UPSTREAM_SHA: ${{ steps.compare.outputs.upstream_sha }}
+          LOCAL_SHA: ${{ steps.compare.outputs.local_sha }}
+        with:
+          script: |
+            const branch = process.env.SYNC_BRANCH;
+            const upstreamSha = process.env.UPSTREAM_SHA;
+            const localSha = process.env.LOCAL_SHA;
+
+            const title = `chore: sync upstream (${upstreamSha.slice(0, 7)})`;
+            const body = [
+              "## Upstream Sync",
+              "",
+              `- Local master: \`${localSha}\``,
+              `- Upstream master: \`${upstreamSha}\``,
+              "",
+              "This PR is created by the automated sync workflow.",
+            ].join("\n");
+
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              base: "master",
+              per_page: 100,
+            });
+
+            let pr = pulls.find((item) => item.head?.ref === branch);
+            if (!pr) {
+              const created = await github.rest.pulls.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                base: "master",
+                head: branch,
+                title,
+                body,
+              });
+              pr = created.data;
+            } else {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                title,
+                body,
+              });
+            }
+
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: ["upstream-sync"],
+              });
+            } catch (error) {
+              if (error.status !== 404 && error.status !== 422) {
+                throw error;
+              }
+              try {
+                await github.rest.repos.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: "upstream-sync",
+                  color: "0366d6",
+                  description: "Automated upstream synchronization PR",
+                });
+              } catch (createError) {
+                if (createError.status !== 422) {
+                  throw createError;
+                }
+              }
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: ["upstream-sync"],
+              });
+            }
+
+            core.setOutput("number", String(pr.number));
+            core.setOutput("url", pr.html_url);
+
+      - name: Decide whether to trigger release workflow
+        id: decide
+        run: |
+          set -euo pipefail
+
+          HAS_NEW_COMMITS="${{ steps.compare.outputs.has_new_commits }}"
+          HAS_NEW_UPSTREAM_RELEASE="${{ steps.release_check.outputs.has_new_upstream_release }}"
+          MERGE_CONFLICT="${{ steps.merge.outputs.merge_conflict }}"
+          BRANCH_UPDATED="${{ steps.merge.outputs.branch_updated }}"
+          SYNC_BRANCH="${{ steps.merge.outputs.sync_branch }}"
+          UPSTREAM_TAG="${{ steps.upstream_release.outputs.tag }}"
+
+          SHOULD_TRIGGER_RELEASE="false"
+          RELEASE_MODE=""
+          SOURCE_REF=""
+          FINAL_UPSTREAM_TAG=""
+
+          if [ "$HAS_NEW_UPSTREAM_RELEASE" = "true" ]; then
+            if [ "$HAS_NEW_COMMITS" = "true" ] && [ "$MERGE_CONFLICT" = "true" ]; then
+              echo "ERROR: Merge conflict detected, stop automatic release."
+              exit 1
+            fi
+            SHOULD_TRIGGER_RELEASE="true"
+            RELEASE_MODE="release"
+            FINAL_UPSTREAM_TAG="$UPSTREAM_TAG"
+            if [ -n "$SYNC_BRANCH" ]; then
+              SOURCE_REF="$SYNC_BRANCH"
+            else
+              SOURCE_REF="master"
+            fi
+          elif [ "$HAS_NEW_COMMITS" = "true" ]; then
+            if [ "$MERGE_CONFLICT" = "true" ]; then
+              echo "ERROR: Merge conflict detected, stop automatic prerelease."
+              exit 1
+            fi
+            if [ "$BRANCH_UPDATED" = "true" ] && [ -n "$SYNC_BRANCH" ]; then
+              SHOULD_TRIGGER_RELEASE="true"
+              RELEASE_MODE="prerelease"
+              SOURCE_REF="$SYNC_BRANCH"
+            fi
+          fi
+
+          echo "should_trigger_release=$SHOULD_TRIGGER_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "release_mode=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
+          echo "source_ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
+          echo "upstream_tag=$FINAL_UPSTREAM_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish sync summary
+        if: always()
+        run: |
+          {
+            echo "## Upstream Sync Summary"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| New Commits | \`${{ steps.compare.outputs.has_new_commits }}\` |"
+            echo "| New Upstream Release | \`${{ steps.release_check.outputs.has_new_upstream_release }}\` |"
+            echo "| Sync Branch | \`${{ steps.merge.outputs.sync_branch }}\` |"
+            echo "| Sync PR | \`${{ steps.sync_pr.outputs.url }}\` |"
+            echo "| Trigger Release | \`${{ steps.decide.outputs.should_trigger_release }}\` |"
+            echo "| Release Mode | \`${{ steps.decide.outputs.release_mode }}\` |"
+            echo "| Release Source Ref | \`${{ steps.decide.outputs.source_ref }}\` |"
+            echo "| Upstream Tag | \`${{ steps.decide.outputs.upstream_tag }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  trigger-release:
+    needs: sync
+    if: needs.sync.outputs.should_trigger_release == 'true'
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      source_ref: ${{ needs.sync.outputs.source_ref }}
+      release_mode: ${{ needs.sync.outputs.release_mode }}
+      upstream_tag: ${{ needs.sync.outputs.upstream_tag }}
+    secrets: inherit

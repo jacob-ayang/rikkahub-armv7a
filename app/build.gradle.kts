@@ -31,12 +31,32 @@ android {
         }
     }
 
+    flavorDimensions += "arch"
+
+    productFlavors {
+        create("universal") {
+            dimension = "arch"
+            ndk {
+                abiFilters.clear()
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
+        }
+        create("armv7") {
+            dimension = "arch"
+            ndk {
+                abiFilters.clear()
+                abiFilters += "armeabi-v7a"
+            }
+        }
+    }
+
     splits {
         abi {
             // AppBundle tasks usually contain "bundle" in their name
             //noinspection WrongGradleMethod
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
-            isEnable = !isBuildingBundle
+            val isArmv7Build = gradle.startParameter.taskNames.any { it.lowercase().contains("armv7") }
+            isEnable = !isBuildingBundle && !isArmv7Build
             reset()
             include("arm64-v8a", "x86_64")
             isUniversalApk = true
@@ -59,7 +79,7 @@ android {
                 if (storeFilePath != null && storePasswordValue != null &&
                     keyAliasValue != null && keyPasswordValue != null
                 ) {
-                    storeFile = file(storeFilePath)
+                    storeFile = rootProject.file(storeFilePath)
                     storePassword = storePasswordValue
                     keyAlias = keyAliasValue
                     keyPassword = keyPasswordValue
@@ -137,8 +157,8 @@ composeCompiler {
 }
 
 tasks.register("buildAll") {
-    dependsOn("assembleRelease", "bundleRelease")
-    description = "Build both APK and AAB"
+    dependsOn("assembleArmv7Release", "assembleUniversalRelease")
+    description = "Build ARMv7a and Universal APKs"
 }
 
 ksp {

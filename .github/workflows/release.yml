@@ -2,49 +2,248 @@ name: Release Build
 
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Git ref to build (branch, tag, or SHA)"
+        required: false
+        default: "master"
+        type: string
+      release_mode:
+        description: "Release mode"
+        required: true
+        default: "prerelease"
+        type: choice
+        options:
+          - prerelease
+          - release
+      upstream_tag:
+        description: "Required when release_mode=release"
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      source_ref:
+        required: true
+        type: string
+      release_mode:
+        required: true
+        type: string
+      upstream_tag:
+        required: false
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
-    
+    env:
+      INPUT_SOURCE_REF: ${{ inputs.source_ref }}
+      INPUT_RELEASE_MODE: ${{ inputs.release_mode }}
+      INPUT_UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Resolve and validate inputs
+        id: params
+        run: |
+          set -euo pipefail
+
+          SOURCE_REF="${INPUT_SOURCE_REF:-master}"
+          RELEASE_MODE="${INPUT_RELEASE_MODE:-prerelease}"
+          UPSTREAM_TAG="${INPUT_UPSTREAM_TAG:-}"
+
+          if [ "$RELEASE_MODE" != "prerelease" ] && [ "$RELEASE_MODE" != "release" ]; then
+            echo "ERROR: release_mode must be prerelease or release"
+            exit 1
+          fi
+
+          if [ "$RELEASE_MODE" = "release" ] && [ -z "$UPSTREAM_TAG" ]; then
+            echo "ERROR: upstream_tag is required when release_mode=release"
+            exit 1
+          fi
+
+          echo "source_ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
+          echo "release_mode=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
+          echo "upstream_tag=$UPSTREAM_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ steps.params.outputs.source_ref }}
 
-      - name: Set up JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
+          cache: gradle
 
-      - name: Gradle cache
-        uses: actions/cache@v4
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          api-level: 36
+          ndk-version: 27.0.11902837
 
-      - name: Prepare build files
+      - name: Validate required secrets
         run: |
-          # 解码base64编码的keystore文件
-          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          
-          # 写入签名配置到local.properties
-          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          
-          # 写入Google Services配置
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          set -euo pipefail
 
-      - name: Gradle Build
+          MISSING=0
+
+          if [ -z "${{ secrets.KEY_BASE64 }}" ]; then
+            echo "ERROR: Missing secret KEY_BASE64"
+            MISSING=1
+          fi
+          if [ -z "${{ secrets.SIGNING_CONFIG_B64 }}" ]; then
+            echo "ERROR: Missing secret SIGNING_CONFIG_B64"
+            MISSING=1
+          fi
+          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" ]; then
+            echo "ERROR: Missing secret GOOGLE_SERVICES_JSON_B64"
+            MISSING=1
+          fi
+
+          if [ "$MISSING" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Prepare build secrets
         run: |
+          set -euo pipefail
+
+          printf '%s' "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
+          printf '%s' "${{ secrets.SIGNING_CONFIG_B64 }}" | base64 -d > local.properties
+          printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" | base64 -d > app/google-services.json
+
+          if ! grep -q '^storeFile=' local.properties; then
+            echo 'storeFile=rikkahub.keystore' >> local.properties
+          fi
+
+          for key in storePassword keyAlias keyPassword; do
+            if ! grep -q "^${key}=" local.properties; then
+              echo "ERROR: local.properties is missing required key: $key"
+              exit 1
+            fi
+          done
+
+      - name: Extract build metadata
+        id: meta
+        run: |
+          set -euo pipefail
+
+          VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)"
+          VERSION_CODE="$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts | head -1)"
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          BUILD_TIMESTAMP="$(date -u +'%Y%m%d%H%M')"
+
+          RELEASE_MODE="${{ steps.params.outputs.release_mode }}"
+          UPSTREAM_TAG="${{ steps.params.outputs.upstream_tag }}"
+
+          if [ "$RELEASE_MODE" = "release" ]; then
+            RELEASE_TAG="$UPSTREAM_TAG"
+            RELEASE_NAME="RikkaHub ${VERSION_NAME}"
+            IS_PRERELEASE="false"
+          else
+            RELEASE_TAG="${VERSION_NAME}-pre.${BUILD_TIMESTAMP}+${SHORT_SHA}"
+            RELEASE_NAME="RikkaHub ${VERSION_NAME} prerelease ${BUILD_TIMESTAMP}"
+            IS_PRERELEASE="true"
+          fi
+
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "build_timestamp=$BUILD_TIMESTAMP" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Build ARMv7a and Universal APK
+        run: |
+          set -euo pipefail
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew clean assembleArmv7Release assembleUniversalRelease --stacktrace
 
-      - name: Upload artifacts
+      - name: Collect and rename APK artifacts
+        id: artifacts
+        run: |
+          set -euo pipefail
+
+          ARMV7_APK="$(find app/build/outputs/apk -type f -name '*armv7*release*.apk' | head -1)"
+          UNIVERSAL_APK="$(find app/build/outputs/apk -type f -name '*-universal-release*.apk' | head -1)"
+
+          if [ -z "$ARMV7_APK" ] || [ -z "$UNIVERSAL_APK" ]; then
+            echo "ERROR: Expected armv7a and universal APK outputs were not found."
+            echo "Found APK files:"
+            find app/build/outputs/apk -type f -name '*.apk' || true
+            exit 1
+          fi
+
+          mkdir -p build-output
+
+          VERSION_NAME="${{ steps.meta.outputs.version_name }}"
+          SHORT_SHA="${{ steps.meta.outputs.short_sha }}"
+
+          ARMV7_NAME="rikkahub-${VERSION_NAME}-armv7a-${SHORT_SHA}.apk"
+          UNIVERSAL_NAME="rikkahub-${VERSION_NAME}-universal-${SHORT_SHA}.apk"
+
+          cp "$ARMV7_APK" "build-output/$ARMV7_NAME"
+          cp "$UNIVERSAL_APK" "build-output/$UNIVERSAL_NAME"
+
+          echo "armv7_name=$ARMV7_NAME" >> "$GITHUB_OUTPUT"
+          echo "universal_name=$UNIVERSAL_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
-        if: success()
         with:
-          name: artifacts
-          path: app/build/outputs/apk/release/*.apk
+          name: apk-${{ steps.meta.outputs.release_tag }}
+          path: build-output/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create or update GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.meta.outputs.release_tag }}
+          name: ${{ steps.meta.outputs.release_name }}
+          commit: ${{ steps.meta.outputs.source_sha }}
+          prerelease: ${{ steps.meta.outputs.is_prerelease == 'true' }}
+          allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
+          artifacts: build-output/*.apk
+          body: |
+            ## Build Information
+            - Version: `${{ steps.meta.outputs.version_name }}` (`${{ steps.meta.outputs.version_code }}`)
+            - Source Ref: `${{ steps.params.outputs.source_ref }}`
+            - Commit: `${{ steps.meta.outputs.source_sha }}`
+            - Mode: `${{ steps.params.outputs.release_mode }}`
+            - Upstream Tag: `${{ steps.params.outputs.upstream_tag }}`
+
+            ## APK Files
+            - `${{ steps.artifacts.outputs.armv7_name }}` (ARMv7a)
+            - `${{ steps.artifacts.outputs.universal_name }}` (Universal)
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## Release Build Summary"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Status | ${{ job.status }} |"
+            echo "| Source Ref | \`${{ steps.params.outputs.source_ref }}\` |"
+            echo "| Mode | \`${{ steps.params.outputs.release_mode }}\` |"
+            echo "| Tag | \`${{ steps.meta.outputs.release_tag }}\` |"
+            echo "| ARMv7a APK | \`${{ steps.artifacts.outputs.armv7_name }}\` |"
+            echo "| Universal APK | \`${{ steps.artifacts.outputs.universal_name }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup sensitive files
+        if: always()
+        run: |
+          rm -f local.properties rikkahub.keystore app/google-services.json
