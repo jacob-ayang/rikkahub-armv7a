@@ -161,6 +161,23 @@ jobs:
           echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
 
+      - name: Verify libsimple native libraries
+        run: |
+          set -euo pipefail
+
+          REQUIRED_LIBS=(
+            "app/src/main/jniLibs/arm64-v8a/libsimple.so"
+            "app/src/main/jniLibs/x86_64/libsimple.so"
+            "app/src/main/jniLibs/armeabi-v7a/libsimple.so"
+          )
+
+          for so_path in "${REQUIRED_LIBS[@]}"; do
+            if [ ! -f "$so_path" ]; then
+              echo "ERROR: Missing required native library: $so_path"
+              exit 1
+            fi
+          done
+
       - name: Build ARMv7a and Universal APK
         run: |
           set -euo pipefail
@@ -195,6 +212,23 @@ jobs:
 
           echo "armv7_name=$ARMV7_NAME" >> "$GITHUB_OUTPUT"
           echo "universal_name=$UNIVERSAL_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Verify armv7 APK contains libsimple.so
+        run: |
+          set -euo pipefail
+
+          ARMV7_APK="$(find app/build/outputs/apk -type f -name '*armv7*release*.apk' | head -1)"
+          if [ -z "$ARMV7_APK" ]; then
+            echo "ERROR: armv7 APK not found for native library check."
+            exit 1
+          fi
+
+          if ! unzip -l "$ARMV7_APK" | grep -q "lib/armeabi-v7a/libsimple.so"; then
+            echo "ERROR: armv7 APK is missing lib/armeabi-v7a/libsimple.so"
+            echo "Detected armv7 native entries:"
+            unzip -l "$ARMV7_APK" | grep "lib/armeabi-v7a/" || true
+            exit 1
+          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

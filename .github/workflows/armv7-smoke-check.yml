@@ -1,0 +1,138 @@
+name: ARMv7 APK Smoke Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag to verify (empty = latest prerelease)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-check:
+    runs-on: ubuntu-latest
+    env:
+      INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Setup Android SDK tools
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 36
+
+      - name: Resolve release and download armv7 APK
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p build-output
+          REQUESTED_TAG="${INPUT_RELEASE_TAG:-}"
+          API_ROOT="https://api.github.com/repos/${REPO}"
+
+          if [ -n "$REQUESTED_TAG" ]; then
+            RELEASE_JSON="$(curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${API_ROOT}/releases/tags/${REQUESTED_TAG}")"
+          else
+            RELEASE_JSON="$(curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${API_ROOT}/releases?per_page=30" | jq 'map(select(.prerelease == true and .draft == false)) | .[0]')"
+            if [ "$RELEASE_JSON" = "null" ]; then
+              echo "ERROR: No prerelease found."
+              exit 1
+            fi
+          fi
+
+          RELEASE_TAG="$(echo "$RELEASE_JSON" | jq -r '.tag_name')"
+          RELEASE_NAME="$(echo "$RELEASE_JSON" | jq -r '.name')"
+          RELEASE_URL="$(echo "$RELEASE_JSON" | jq -r '.html_url')"
+          APK_URL="$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("armv7a.*\\.apk$")) | .browser_download_url' | head -n 1)"
+          APK_NAME="$(echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("armv7a.*\\.apk$")) | .name' | head -n 1)"
+
+          if [ -z "$APK_URL" ] || [ "$APK_URL" = "null" ]; then
+            echo "ERROR: No armv7a APK asset found in release ${RELEASE_TAG}."
+            echo "$RELEASE_JSON" | jq -r '.assets[].name' || true
+            exit 1
+          fi
+
+          curl -fL "$APK_URL" -o "build-output/${APK_NAME}"
+
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_url=$RELEASE_URL" >> "$GITHUB_OUTPUT"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          echo "apk_path=build-output/${APK_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify armv7 native library in APK
+        run: |
+          set -euo pipefail
+
+          APK_PATH="${{ steps.resolve.outputs.apk_path }}"
+
+          unzip -l "$APK_PATH" | tee build-output/apk-file-list.txt
+          if ! grep -q "lib/armeabi-v7a/libsimple.so" build-output/apk-file-list.txt; then
+            echo "ERROR: APK missing lib/armeabi-v7a/libsimple.so"
+            exit 1
+          fi
+
+          unzip -p "$APK_PATH" "lib/armeabi-v7a/libsimple.so" > build-output/libsimple.from-apk.so
+          readelf -h build-output/libsimple.from-apk.so | tee build-output/readelf-libsimple.txt
+          nm -D build-output/libsimple.from-apk.so | tee build-output/nm-libsimple.txt
+
+          grep -q "Class:.*ELF32" build-output/readelf-libsimple.txt
+          grep -q "Machine:.*ARM" build-output/readelf-libsimple.txt
+          grep -q "sqlite3_simple_init" build-output/nm-libsimple.txt
+          grep -q "fts5_simple_xCreate" build-output/nm-libsimple.txt
+
+      - name: Verify manifest basics
+        run: |
+          set -euo pipefail
+
+          APK_PATH="${{ steps.resolve.outputs.apk_path }}"
+
+          APP_ID="$(apkanalyzer manifest application-id "$APK_PATH" | tr -d '\r')"
+          MIN_SDK="$(apkanalyzer manifest min-sdk "$APK_PATH" | tr -d '\r')"
+          TARGET_SDK="$(apkanalyzer manifest target-sdk "$APK_PATH" | tr -d '\r')"
+          apkanalyzer manifest print "$APK_PATH" > build-output/manifest.xml
+
+          echo "applicationId=$APP_ID" | tee build-output/manifest-summary.txt
+          echo "minSdk=$MIN_SDK" | tee -a build-output/manifest-summary.txt
+          echo "targetSdk=$TARGET_SDK" | tee -a build-output/manifest-summary.txt
+
+          if [ "$APP_ID" != "me.rerere.rikkahub" ]; then
+            echo "ERROR: Unexpected applicationId: $APP_ID"
+            exit 1
+          fi
+
+          grep -q "android.intent.action.MAIN" build-output/manifest.xml
+          grep -q "android.intent.category.LAUNCHER" build-output/manifest.xml
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## ARMv7 APK Smoke Check"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| Status | ${{ job.status }} |"
+            echo "| Release | [${{ steps.resolve.outputs.release_name }}](${{ steps.resolve.outputs.release_url }}) |"
+            echo "| Release Tag | \`${{ steps.resolve.outputs.release_tag }}\` |"
+            echo "| APK | \`${{ steps.resolve.outputs.apk_name }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload smoke-check artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: armv7-smoke-${{ github.run_id }}
+          path: build-output/*
+          if-no-files-found: error

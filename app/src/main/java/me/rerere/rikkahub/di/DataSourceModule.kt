@@ -1,9 +1,10 @@
 package me.rerere.rikkahub.di
 
+import android.content.Context
+import android.util.Log
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import android.content.Context
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
@@ -39,8 +40,14 @@ import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+
+private const val DATA_SOURCE_TAG = "DataSourceModule"
+private const val SIMPLE_EXTENSION_FILE = "libsimple.so"
+private const val SIMPLE_TOKENIZER = "simple"
+private const val UNICODE_TOKENIZER = "unicode61 remove_diacritics 2"
 
 val dataSourceModule = module {
     single {
@@ -49,52 +56,57 @@ val dataSourceModule = module {
 
     single {
         val context: Context = get()
+        val simpleExtension = File(context.applicationInfo.nativeLibraryDir, SIMPLE_EXTENSION_FILE)
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
-                    val dictDir = SimpleDictManager.extractDict(context)
-                    val cursor = db.query("SELECT jieba_dict(?)", arrayOf(dictDir.absolutePath))
-                    cursor.use {
-                        if (it.moveToFirst()) {
-                            val result = it.getString(0)
-                            val success = result?.trimEnd('/') == dictDir.absolutePath.trimEnd('/')
-                            if (!success) {
-                                android.util.Log.e(
-                                    "DataSourceModule",
-                                    "jieba_dict failed: $result, path=${dictDir.absolutePath}"
-                                )
+                    var useSimpleTokenizer = simpleExtension.exists()
+                    if (useSimpleTokenizer) {
+                        try {
+                            val dictDir = SimpleDictManager.extractDict(context)
+                            val cursor = db.query("SELECT jieba_dict(?)", arrayOf(dictDir.absolutePath))
+                            cursor.use {
+                                if (it.moveToFirst()) {
+                                    val result = it.getString(0)
+                                    val success = result?.trimEnd('/') == dictDir.absolutePath.trimEnd('/')
+                                    if (!success) {
+                                        Log.e(
+                                            DATA_SOURCE_TAG,
+                                            "jieba_dict failed: $result, path=${dictDir.absolutePath}"
+                                        )
+                                    }
+                                }
                             }
+                        } catch (e: Exception) {
+                            Log.e(DATA_SOURCE_TAG, "Failed to initialize simple extension, fallback to unicode61", e)
+                            useSimpleTokenizer = false
                         }
+                    } else {
+                        Log.w(DATA_SOURCE_TAG, "libsimple.so missing, fallback to unicode61 tokenizer")
                     }
-                    db.execSQL(
-                        """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
-                            text,
-                            node_id UNINDEXED,
-                            message_id UNINDEXED,
-                            conversation_id UNINDEXED,
-                            title UNINDEXED,
-                            update_at UNINDEXED,
-                            tokenize = 'simple'
-                        )
-                        """.trimIndent()
-                    )
+                    db.ensureMessageFtsTokenizer(useSimpleTokenizer)
                 }
             })
             .openHelperFactory(
                 RequerySQLiteOpenHelperFactory(
                     listOf(
-                RequerySQLiteOpenHelperFactory.ConfigurationOptions { options ->
-                    options.customExtensions.add(
-                        SQLiteCustomExtension(
-                            context.applicationInfo.nativeLibraryDir + "/libsimple",
-                            null
-                        )
+                        RequerySQLiteOpenHelperFactory.ConfigurationOptions { options ->
+                            if (simpleExtension.exists()) {
+                                options.customExtensions.add(
+                                    SQLiteCustomExtension(
+                                        simpleExtension.absolutePath,
+                                        null
+                                    )
+                                )
+                            } else {
+                                Log.w(DATA_SOURCE_TAG, "Skip loading SQLite extension because libsimple.so is missing")
+                            }
+                            options
+                        }
                     )
-                    options
-                }
-            )))
+                )
+            )
             .build()
     }
 
@@ -233,4 +245,32 @@ val dataSourceModule = module {
     single<RikkaHubAPI> {
         get<Retrofit>().create(RikkaHubAPI::class.java)
     }
+}
+
+private fun SupportSQLiteDatabase.ensureMessageFtsTokenizer(useSimpleTokenizer: Boolean) {
+    val tokenizer = if (useSimpleTokenizer) SIMPLE_TOKENIZER else UNICODE_TOKENIZER
+    val expectedTokenizeClause = "tokenize = '$tokenizer'"
+    val currentCreateSql = query("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_fts'").use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0) else null
+    }
+
+    val hasExpectedTokenizer = currentCreateSql?.contains(expectedTokenizeClause, ignoreCase = true) == true
+    if (!hasExpectedTokenizer) {
+        execSQL("DROP TABLE IF EXISTS message_fts")
+        Log.i(DATA_SOURCE_TAG, "Recreate message_fts with tokenizer=$tokenizer")
+    }
+
+    execSQL(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
+            text,
+            node_id UNINDEXED,
+            message_id UNINDEXED,
+            conversation_id UNINDEXED,
+            title UNINDEXED,
+            update_at UNINDEXED,
+            tokenize = '$tokenizer'
+        )
+        """.trimIndent()
+    )
 }
