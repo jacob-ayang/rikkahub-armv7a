@@ -20,6 +20,22 @@ data class MessageSearchResult(
 )
 
 private const val TAG = "MessageFtsManager"
+private const val SIMPLE_SEARCH_SQL = """
+    SELECT node_id, message_id, conversation_id, title, update_at,
+           simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
+    FROM message_fts
+    WHERE text MATCH jieba_query(?)
+    ORDER BY rank
+    LIMIT 50
+"""
+private const val FALLBACK_SEARCH_SQL = """
+    SELECT node_id, message_id, conversation_id, title, update_at,
+           snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
+    FROM message_fts
+    WHERE text MATCH ?
+    ORDER BY rank
+    LIMIT 50
+"""
 
 class MessageFtsManager(private val database: AppDatabase) {
 
@@ -58,17 +74,12 @@ class MessageFtsManager(private val database: AppDatabase) {
 
     suspend fun search(keyword: String): List<MessageSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<MessageSearchResult>()
-        val cursor = db.query(
-            """
-            SELECT node_id, message_id, conversation_id, title, update_at,
-                   simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
-            FROM message_fts
-            WHERE text MATCH jieba_query(?)
-            ORDER BY rank
-            LIMIT 50
-            """.trimIndent(),
-            arrayOf(keyword)
-        )
+        val cursor = try {
+            db.query(SIMPLE_SEARCH_SQL.trimIndent(), arrayOf(keyword))
+        } catch (e: Exception) {
+            Log.w(TAG, "simple extension unavailable, fallback to standard FTS query", e)
+            db.query(FALLBACK_SEARCH_SQL.trimIndent(), arrayOf(keyword.toFallbackMatchQuery()))
+        }
         Log.i(TAG, "search: $keyword")
         cursor.use {
             while (it.moveToNext()) {
@@ -92,3 +103,5 @@ private fun UIMessage.extractFtsText(): String =
     parts.filterIsInstance<UIMessagePart.Text>()
         .joinToString("\n") { it.text }
         .take(10_000)
+
+private fun String.toFallbackMatchQuery(): String = "\"${replace("\"", "\"\"")}\""
