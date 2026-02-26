@@ -27,6 +27,7 @@ import type {
   UIMessagePart,
 } from "~/types";
 
+import { copyTextToClipboard } from "~/lib/clipboard";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import {
@@ -253,8 +254,13 @@ const ChatMessageActionsRow = React.memo(({
 
   const handleCopy = React.useCallback(async () => {
     const text = buildCopyText(message.parts, t);
-    if (!text || typeof navigator === "undefined" || !navigator.clipboard) return;
-    await navigator.clipboard.writeText(text);
+    if (!text) return;
+
+    try {
+      await copyTextToClipboard(text);
+    } catch {
+      // Ignore copy failures to keep action row interaction uninterrupted.
+    }
   }, [message.parts, t]);
 
   const handleRegenerate = React.useCallback(async () => {
@@ -513,7 +519,11 @@ export const ChatMessage = React.memo(({
   );
 
   return (
-    <div className={cn("flex flex-col gap-4", isUser ? "items-end" : "items-start")}>
+    <div
+      className={cn("flex flex-col gap-4", isUser ? "items-end" : "items-start")}
+      data-message-role={message.role.toLowerCase()}
+      data-message-loading={loading || undefined}
+    >
       <div className="flex w-full flex-col gap-2">
         <ChatMessageAvatarRow
           message={message}
@@ -525,6 +535,7 @@ export const ChatMessage = React.memo(({
 
         <div className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}>
           <div
+            data-message-bubble
             className={cn(
               "flex flex-col gap-2 text-sm",
               isUser ? "max-w-[85%] rounded-lg bg-muted px-4 py-3" : "w-full",
@@ -541,17 +552,19 @@ export const ChatMessage = React.memo(({
       </div>
 
       {showActions && (
-        <ChatMessageActionsRow
-          node={node}
-          message={message}
-          loading={loading}
-          alignRight={isUser}
-          onEdit={onEdit}
-          onRegenerate={onRegenerate}
-          onSelectBranch={onSelectBranch}
-          onDelete={onDelete}
-          onFork={onFork}
-        />
+        <div data-message-actions>
+          <ChatMessageActionsRow
+            node={node}
+            message={message}
+            loading={loading}
+            alignRight={isUser}
+            onEdit={onEdit}
+            onRegenerate={onRegenerate}
+            onSelectBranch={onSelectBranch}
+            onDelete={onDelete}
+            onFork={onFork}
+          />
+        </div>
       )}
 
       <ChatMessageAnnotationsRow annotations={message.annotations} alignRight={isUser} />
