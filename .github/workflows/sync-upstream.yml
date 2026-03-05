@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 concurrency:
   group: sync-upstream
@@ -23,6 +24,7 @@ jobs:
       release_mode: ${{ steps.decide.outputs.release_mode }}
       upstream_tag: ${{ steps.decide.outputs.upstream_tag }}
       should_trigger_release: ${{ steps.decide.outputs.should_trigger_release }}
+      conflict_files: ${{ steps.merge.outputs.conflict_files }}
 
     steps:
       - name: Checkout master
@@ -185,9 +187,11 @@ jobs:
 
           if [ "$MERGE_EXIT" -ne 0 ]; then
             if git ls-files -u | grep -q '.'; then
+              CONFLICT_FILES="$(git diff --name-only --diff-filter=U | paste -sd ',' -)"
               echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
               echo "merge_conflict=true" >> "$GITHUB_OUTPUT"
               echo "branch_updated=false" >> "$GITHUB_OUTPUT"
+              echo "conflict_files=$CONFLICT_FILES" >> "$GITHUB_OUTPUT"
               echo "ERROR: Merge conflicts detected between master and upstream/master"
               exit 1
             fi
@@ -209,6 +213,91 @@ jobs:
           echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
           echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
           echo "branch_updated=$BRANCH_UPDATED" >> "$GITHUB_OUTPUT"
+          echo "conflict_files=" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update conflict issue
+        if: always() && steps.merge.outputs.merge_conflict == 'true'
+        uses: actions/github-script@v7
+        env:
+          LOCAL_SHA: ${{ steps.compare.outputs.local_sha }}
+          UPSTREAM_SHA: ${{ steps.compare.outputs.upstream_sha }}
+          CONFLICT_FILES: ${{ steps.merge.outputs.conflict_files }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const label = "upstream-sync";
+            const issueTitle = "chore: upstream sync conflict";
+            const localSha = process.env.LOCAL_SHA || "";
+            const upstreamSha = process.env.UPSTREAM_SHA || "";
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const conflictFiles = (process.env.CONFLICT_FILES || "")
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean);
+
+            const filesBlock = conflictFiles.length
+              ? conflictFiles.map((file) => `- \`${file}\``).join("\n")
+              : "- (unknown)";
+
+            const body = [
+              "## Upstream Sync Conflict",
+              "",
+              `- Local master: \`${localSha}\``,
+              `- Upstream master: \`${upstreamSha}\``,
+              `- Workflow run: ${runUrl}`,
+              "",
+              "### Conflict Files",
+              filesBlock,
+              "",
+              "_This issue is maintained automatically by the sync workflow._",
+            ].join("\n");
+
+            try {
+              await github.rest.repos.createLabel({
+                owner,
+                repo,
+                name: label,
+                color: "b60205",
+                description: "Upstream synchronization status and conflicts",
+              });
+            } catch (error) {
+              if (error.status !== 422) {
+                throw error;
+              }
+            }
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              labels: label,
+              per_page: 100,
+            });
+
+            const existing = openIssues.find((item) => !item.pull_request && item.title === issueTitle);
+            if (existing) {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: existing.number,
+                body,
+              });
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: existing.number,
+                labels: [label],
+              });
+            } else {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title: issueTitle,
+                body,
+                labels: [label],
+              });
+            }
 
       - name: Create or update sync PR
         if: steps.compare.outputs.has_new_commits == 'true' && steps.merge.outputs.merge_conflict != 'true' && (steps.merge.outputs.branch_updated == 'true' || steps.find_pr.outputs.number != '')
@@ -356,6 +445,7 @@ jobs:
             echo "| New Commits | \`${{ steps.compare.outputs.has_new_commits }}\` |"
             echo "| New Upstream Release | \`${{ steps.release_check.outputs.has_new_upstream_release }}\` |"
             echo "| Sync Branch | \`${{ steps.merge.outputs.sync_branch }}\` |"
+            echo "| Conflict Files | \`${{ steps.merge.outputs.conflict_files }}\` |"
             echo "| Sync PR | \`${{ steps.sync_pr.outputs.url }}\` |"
             echo "| Trigger Release | \`${{ steps.decide.outputs.should_trigger_release }}\` |"
             echo "| Release Mode | \`${{ steps.decide.outputs.release_mode }}\` |"
