@@ -41,8 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pencil
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Edit03
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Avatar
@@ -167,7 +167,7 @@ fun UIAvatar(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Lucide.Pencil,
+                    imageVector = HugeIcons.Edit03,
                     contentDescription = "Edit",
                     modifier = Modifier
                         .size(10.dp)

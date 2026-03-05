@@ -149,10 +149,12 @@
   <string name="backup_page_export_desc">導出APP數據為檔案</string>
   <string name="backup_page_exporting">正在導出...</string>
   <string name="backup_page_files">檔案</string>
-  <string name="backup_page_import_chatbox_desc">導入ChatBox數據</string>
+  <string name="backup_page_import_chatbox_desc">匯入 ChatBox 提供者設定</string>
+  <string name="backup_page_import_cherry_studio_desc">匯入 Cherry Studio 提供者設定</string>
   <string name="backup_page_import_desc">導入本地備份檔案</string>
   <string name="backup_page_import_export">本地</string>
   <string name="backup_page_import_from_chatbox">從ChatBox導入</string>
+  <string name="backup_page_import_from_cherry_studio">從Cherry Studio導入</string>
   <string name="backup_page_import_from_other_app">從其他APP導入</string>
   <string name="backup_page_importing">正在恢復...</string>
   <string name="backup_page_loading_failed">載入備份檔案失敗: %s</string>
@@ -891,5 +893,11 @@
   <string name="setting_mcp_page_import_no_valid_config">未找到有效的 MCP Server 配置</string>
   <string name="setting_mcp_page_import_parse_error">JSON 解析失敗：%1$s</string>
   <string name="setting_mcp_page_import_confirm">匯入</string>
+  <string name="setting_display_page_enable_blur_effect_title">啟用模糊效果</string>
+  <string name="setting_display_page_enable_blur_effect_desc">在聊天輸入列啟用模糊效果</string>
+  <string name="setting_page_web_server_localhost_only">僅限本機</string>
+  <string name="setting_page_web_server_localhost_only_desc">僅監聽 localhost (127.0.0.1)，停用區域網路與 mDNS 存取</string>
+  <string name="setting_display_page_show_date_below_name_title">在名稱下方顯示日期</string>
+  <string name="setting_display_page_show_date_below_name_desc">是否在暱稱或模型名稱下方顯示訊息日期</string>
 </resources>
 

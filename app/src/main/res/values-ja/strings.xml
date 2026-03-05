@@ -149,10 +149,12 @@
   <string name="backup_page_export_desc">アプリデータをファイルにエクスポート</string>
   <string name="backup_page_exporting">エクスポート中...</string>
   <string name="backup_page_files">ファイル</string>
-  <string name="backup_page_import_chatbox_desc">ChatBoxデータをインポート</string>
+  <string name="backup_page_import_chatbox_desc">ChatBoxプロバイダー設定をインポート</string>
+  <string name="backup_page_import_cherry_studio_desc">Cherry Studioプロバイダー設定をインポート</string>
   <string name="backup_page_import_desc">ローカルバックアップファイルをインポート</string>
   <string name="backup_page_import_export">ローカル</string>
   <string name="backup_page_import_from_chatbox">ChatBoxからインポート</string>
+  <string name="backup_page_import_from_cherry_studio">Cherry Studioからインポート</string>
   <string name="backup_page_import_from_other_app">他のアプリからインポート</string>
   <string name="backup_page_importing">インポート中...</string>
   <string name="backup_page_loading_failed">バックアップファイルの読み込み失敗: %s</string>
@@ -893,5 +895,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_mcp_page_import_no_valid_config">有効なMCPサーバー設定が見つかりません</string>
   <string name="setting_mcp_page_import_parse_error">JSON解析に失敗しました: %1$s</string>
   <string name="setting_mcp_page_import_confirm">インポート</string>
+  <string name="setting_display_page_enable_blur_effect_title">ぼかし効果を有効にする</string>
+  <string name="setting_display_page_enable_blur_effect_desc">チャット入力バーにぼかし効果を有効にする</string>
+  <string name="setting_page_web_server_localhost_only">localhostのみ</string>
+  <string name="setting_page_web_server_localhost_only_desc">localhost (127.0.0.1) のみでリッスンし、LANおよびmDNSアクセスを無効化</string>
+  <string name="setting_display_page_show_date_below_name_title">名前の下に日付を表示</string>
+  <string name="setting_display_page_show_date_below_name_desc">ニックネームまたはモデル名の下にメッセージの日付を表示するかどうか</string>
 </resources>
 

@@ -1,5 +1,17 @@
 package me.rerere.rikkahub.ui.pages.prompts
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Book01
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.Download01
+import me.rerere.hugeicons.stroke.FileDownload
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Tools
+import me.rerere.hugeicons.stroke.Share03
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.MagicWand01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +48,7 @@ import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
@@ -46,7 +59,7 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -60,23 +73,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Book
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.FileDown
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Settings2
-import com.composables.icons.lucide.Share2
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.Wand
-import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.R
@@ -95,6 +97,7 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -105,12 +108,15 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 navigationIcon = { BackButton() },
-                title = { Text(stringResource(R.string.prompt_page_title)) }
+                title = { Text(stringResource(R.string.prompt_page_title)) },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
             )
         },
         bottomBar = {
@@ -118,7 +124,7 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 0,
                     label = { Text(stringResource(R.string.prompt_page_mode_injection_tab)) },
-                    icon = { Icon(Lucide.Wand, null) },
+                    icon = { Icon(HugeIcons.MagicWand01, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(0) }
                     }
@@ -126,13 +132,15 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
                 NavigationBarItem(
                     selected = pagerState.currentPage == 1,
                     label = { Text(stringResource(R.string.prompt_page_lorebook_tab)) },
-                    icon = { Icon(Lucide.Book, null) },
+                    icon = { Icon(HugeIcons.Book01, null) },
                     onClick = {
                         scope.launch { pagerState.animateScrollToPage(1) }
                     }
                 )
             }
-        }
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         HorizontalPager(
             state = pagerState,
@@ -254,7 +262,7 @@ private fun ModeInjectionTab(
                 .offset(y = -ScreenOffset),
             leadingContent = {
                 IconButton(onClick = { importer.importFromFile() }) {
-                    Icon(Lucide.Import, null)
+                    Icon(HugeIcons.FileImport, null)
                 }
             },
         ) {
@@ -263,7 +271,7 @@ private fun ModeInjectionTab(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Lucide.Plus, null)
+                    Icon(HugeIcons.Add01, null)
                     AnimatedVisibility(expanded) {
                         Row {
                             Spacer(modifier = Modifier.size(8.dp))
@@ -310,7 +318,7 @@ private fun ModeInjectionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { scope.launch { swipeState.reset() } }) {
-                    Icon(Lucide.X, null)
+                    Icon(HugeIcons.Cancel01, null)
                 }
                 FilledIconButton(onClick = {
                     scope.launch {
@@ -318,7 +326,7 @@ private fun ModeInjectionCard(
                         swipeState.reset()
                     }
                 }) {
-                    Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
+                    Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
                 }
             }
         },
@@ -327,7 +335,7 @@ private fun ModeInjectionCard(
     ) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                containerColor = CustomColors.listItemColors.containerColor
             )
         ) {
             Row(
@@ -364,10 +372,10 @@ private fun ModeInjectionCard(
                     }
                 }
                 IconButton(onClick = { showExportDialog = true }) {
-                    Icon(Lucide.Share2, stringResource(R.string.export_title))
+                    Icon(HugeIcons.Share03, stringResource(R.string.export_title))
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
+                    Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
                 }
             }
         }
@@ -402,7 +410,7 @@ private fun ModeInjectionEditSheet(
                     onDismiss()
                 }
             }) {
-                Icon(Lucide.ChevronDown, null)
+                Icon(HugeIcons.ArrowDown01, null)
             }
         }
     ) {
@@ -653,7 +661,7 @@ private fun LorebookTab(
                 .offset(y = -ScreenOffset),
             leadingContent = {
                 IconButton(onClick = { importer.importFromFile() }) {
-                    Icon(Lucide.Import, null)
+                    Icon(HugeIcons.FileImport, null)
                 }
             },
         ) {
@@ -662,7 +670,7 @@ private fun LorebookTab(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Lucide.Plus, null)
+                    Icon(HugeIcons.Add01, null)
                     AnimatedVisibility(expanded) {
                         Row {
                             Spacer(modifier = Modifier.size(8.dp))
@@ -709,7 +717,7 @@ private fun LorebookCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { scope.launch { swipeState.reset() } }) {
-                    Icon(Lucide.X, null)
+                    Icon(HugeIcons.Cancel01, null)
                 }
                 FilledIconButton(onClick = {
                     scope.launch {
@@ -717,7 +725,7 @@ private fun LorebookCard(
                         swipeState.reset()
                     }
                 }) {
-                    Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
+                    Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
                 }
             }
         },
@@ -726,7 +734,7 @@ private fun LorebookCard(
     ) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                containerColor = CustomColors.listItemColors.containerColor
             )
         ) {
             Row(
@@ -774,10 +782,10 @@ private fun LorebookCard(
                     }
                 }
                 IconButton(onClick = { showExportDialog = true }) {
-                    Icon(Lucide.Share2, stringResource(R.string.export_title))
+                    Icon(HugeIcons.Share03, stringResource(R.string.export_title))
                 }
                 IconButton(onClick = onEdit) {
-                    Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
+                    Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
                 }
             }
         }
@@ -820,7 +828,7 @@ private fun LorebookEditSheet(
                     onDismiss()
                 }
             }) {
-                Icon(Lucide.ChevronDown, null)
+                Icon(HugeIcons.ArrowDown01, null)
             }
         }
     ) {
@@ -880,7 +888,7 @@ private fun LorebookEditSheet(
                     IconButton(onClick = {
                         entryEditState.open(PromptInjection.RegexInjection())
                     }) {
-                        Icon(Lucide.Plus, stringResource(R.string.prompt_page_add_entry))
+                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add_entry))
                     }
                 }
 
@@ -963,10 +971,10 @@ private fun RegexInjectionEntryCard(
                 }
             }
             IconButton(onClick = onEdit) {
-                Icon(Lucide.Settings2, stringResource(R.string.prompt_page_edit))
+                Icon(HugeIcons.Tools, stringResource(R.string.prompt_page_edit))
             }
             IconButton(onClick = onDelete) {
-                Icon(Lucide.Trash2, stringResource(R.string.prompt_page_delete))
+                Icon(HugeIcons.Delete01, stringResource(R.string.prompt_page_delete))
             }
         }
     }
@@ -1059,7 +1067,7 @@ private fun RegexInjectionEditDialog(
                                     },
                                     modifier = Modifier.size(16.dp)
                                 ) {
-                                    Icon(Lucide.X, null, modifier = Modifier.size(12.dp))
+                                    Icon(HugeIcons.Cancel01, null, modifier = Modifier.size(12.dp))
                                 }
                             }
                         )
@@ -1085,7 +1093,7 @@ private fun RegexInjectionEditDialog(
                             }
                         }
                     ) {
-                        Icon(Lucide.Plus, stringResource(R.string.prompt_page_add))
+                        Icon(HugeIcons.Add01, stringResource(R.string.prompt_page_add))
                     }
                 }
 

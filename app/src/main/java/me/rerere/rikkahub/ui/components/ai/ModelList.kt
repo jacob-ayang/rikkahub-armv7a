@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -58,16 +57,6 @@ import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastFilter
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Boxes
-import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.GripHorizontal
-import com.composables.icons.lucide.Hammer
-import com.composables.icons.lucide.Heart
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Type
-import com.composables.icons.lucide.X
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -76,6 +65,16 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.DragDropHorizontal
+import me.rerere.hugeicons.stroke.Favourite
+import me.rerere.hugeicons.stroke.Image03
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Text
+import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -139,7 +138,7 @@ fun ModelSelector(
                     }
                 ) {
                     Icon(
-                        Lucide.X,
+                        imageVector = HugeIcons.Cancel01,
                         contentDescription = "Clear"
                     )
                 }
@@ -159,7 +158,7 @@ fun ModelSelector(
                 )
             } else {
                 Icon(
-                    Lucide.Boxes,
+                    imageVector = HugeIcons.Brain02,
                     contentDescription = stringResource(R.string.setting_model_page_chat_model),
                     modifier = Modifier.size(20.dp)
                 )
@@ -230,8 +229,22 @@ private fun ColumnScope.ModelList(
 
     var searchKeywords by remember { mutableStateOf("") }
 
+    val typeFilteredModelsByProvider = remember(providers, modelType) {
+        providers.associate { provider ->
+            provider.id to provider.models.fastFilter { it.type == modelType }
+        }
+    }
+
+    val searchFilteredModelsByProvider = remember(providers, modelType, searchKeywords) {
+        providers.associate { provider ->
+            provider.id to provider.models.fastFilter {
+                it.type == modelType && it.displayName.contains(searchKeywords, true)
+            }
+        }
+    }
+
     // 计算当前选中模型的位置
-    val selectedModelPosition = remember(currentModel, favoriteModels, providers, modelType) {
+    val selectedModelPosition = remember(currentModel, favoriteModels, providers, typeFilteredModelsByProvider) {
         if (currentModel == null) return@remember 0
 
         var position = 0
@@ -260,7 +273,7 @@ private fun ColumnScope.ModelList(
         // 在providers中查找
         for (provider in providers) {
             position += 1 // provider header
-            val models = provider.models.filter { it.type == modelType }
+            val models = typeFilteredModelsByProvider[provider.id].orEmpty()
             val modelIndex = models.indexOfFirst { it.id == currentModel }
             if (modelIndex >= 0) {
                 position += modelIndex
@@ -304,7 +317,7 @@ private fun ColumnScope.ModelList(
     }
     val haptic = LocalHapticFeedback.current
 
-    val providerPositions = remember(providers, favoriteModels) {
+    val providerPositions = remember(providers, favoriteModels, searchFilteredModelsByProvider) {
         var currentIndex = 0
         if (providers.isEmpty()) {
             currentIndex = 1 // no providers item
@@ -314,12 +327,10 @@ private fun ColumnScope.ModelList(
             currentIndex += favoriteModels.size // favorite models
         }
 
-        providers.mapIndexed { index, provider ->
+        providers.map { provider ->
             val position = currentIndex
             currentIndex += 1 // provider header
-            currentIndex += provider.models.fastFilter {
-                it.type == modelType && it.displayName.contains(searchKeywords, true)
-            }.size
+            currentIndex += searchFilteredModelsByProvider[provider.id].orEmpty().size
             provider.id to position
         }.toMap()
     }
@@ -347,7 +358,7 @@ private fun ColumnScope.ModelList(
                 unfocusedContainerColor = Color.Transparent,
             ),
             leadingIcon = {
-                Icon(Lucide.Search, null)
+                Icon(HugeIcons.Search01, null)
             },
             maxLines = 1,
         )
@@ -424,7 +435,7 @@ private fun ColumnScope.ModelList(
                         },
                         dragHandle = {
                             Icon(
-                                imageVector = Lucide.GripHorizontal,
+                                imageVector = HugeIcons.DragDropHorizontal,
                                 contentDescription = null,
                                 modifier = Modifier.longPressDraggableHandle(
                                     onDragStarted = {
@@ -466,12 +477,7 @@ private fun ColumnScope.ModelList(
             }
 
             items(
-                items = providerSetting.models.fastFilter {
-                    it.type == modelType && it.displayName.contains(
-                        searchKeywords,
-                        true
-                    )
-                },
+                items = searchFilteredModelsByProvider[providerSetting.id].orEmpty(),
                 key = { it.id }
             ) { model ->
                 val favorite = settings.value.favoriteModels.contains(model.id)
@@ -512,7 +518,7 @@ private fun ColumnScope.ModelList(
                                 )
                             } else {
                                 Icon(
-                                    Lucide.Heart,
+                                    imageVector = HugeIcons.Favourite,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -688,8 +694,8 @@ fun ModelModalityTag(model: Model) {
         model.inputModalities.fastForEach { modality ->
             Icon(
                 imageVector = when (modality) {
-                    Modality.TEXT -> Lucide.Type
-                    Modality.IMAGE -> Lucide.Image
+                    Modality.TEXT -> HugeIcons.Text
+                    Modality.IMAGE -> HugeIcons.Image03
                 },
                 contentDescription = null,
                 modifier = Modifier
@@ -698,15 +704,15 @@ fun ModelModalityTag(model: Model) {
             )
         }
         Icon(
-            imageVector = Lucide.ChevronRight,
+            imageVector = HugeIcons.ArrowRight01,
             contentDescription = null,
             modifier = Modifier.size(LocalTextStyle.current.lineHeight.toDp())
         )
         model.outputModalities.fastForEach { modality ->
             Icon(
                 imageVector = when (modality) {
-                    Modality.TEXT -> Lucide.Type
-                    Modality.IMAGE -> Lucide.Image
+                    Modality.TEXT -> HugeIcons.Text
+                    Modality.IMAGE -> HugeIcons.Image03
                 },
                 contentDescription = null,
                 modifier = Modifier
@@ -726,7 +732,7 @@ fun ModelAbilityTag(model: Model) {
                     type = TagType.WARNING
                 ) {
                     Icon(
-                        imageVector = Lucide.Hammer,
+                        imageVector = HugeIcons.Tools,
                         contentDescription = null,
                         modifier = Modifier.size(LocalTextStyle.current.lineHeight.toDp())
                     )

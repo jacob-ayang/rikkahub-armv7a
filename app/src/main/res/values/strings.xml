@@ -153,10 +153,12 @@
   <string name="backup_page_export_desc">Export app data to a file</string>
   <string name="backup_page_exporting">Exporting...</string>
   <string name="backup_page_files">Files</string>
-  <string name="backup_page_import_chatbox_desc">Import data from ChatBox</string>
+  <string name="backup_page_import_chatbox_desc">Import ChatBox provider configurations</string>
+  <string name="backup_page_import_cherry_studio_desc">Import Cherry Studio provider configurations</string>
   <string name="backup_page_import_desc">Import local backup file</string>
   <string name="backup_page_import_export">Local</string>
   <string name="backup_page_import_from_chatbox">Import from ChatBox</string>
+  <string name="backup_page_import_from_cherry_studio">Import from Cherry Studio</string>
   <string name="backup_page_import_from_other_app">Import from other app</string>
   <string name="backup_page_importing">Importing...</string>
   <string name="backup_page_loading_failed">Failed to load backup files: %s</string>
@@ -396,6 +398,8 @@
   <string name="setting_display_page_show_message_jumper_title">Show Message Jumper</string>
   <string name="setting_display_page_show_model_name_desc">Whether to display model names in chat messages</string>
   <string name="setting_display_page_show_model_name_title">Show Model Name</string>
+  <string name="setting_display_page_show_date_below_name_desc">Whether to show message date below nickname or model name</string>
+  <string name="setting_display_page_show_date_below_name_title">Show Date Below Name</string>
   <string name="setting_display_page_show_token_usage_desc">Display token usage and message count</string>
   <string name="setting_display_page_show_token_usage_title">Show Token &amp; Context Stats</string>
   <string name="setting_display_page_show_updates_desc">Whether to display app update notifications</string>
@@ -806,6 +810,8 @@
   <string name="setting_page_web_server_jwt_enable_desc">Require password verification when accessing the web interface</string>
   <string name="setting_page_web_server_password">Access password</string>
   <string name="setting_page_web_server_password_desc">Password required for web interface access</string>
+  <string name="setting_page_web_server_localhost_only">Only localhost</string>
+  <string name="setting_page_web_server_localhost_only_desc">Listen only on localhost (127.0.0.1), disable LAN and mDNS access</string>
   <string name="setting_page_web_server_lan_address">LAN Address</string>
   <string name="setting_page_web_server_mdns_address">mDNS Address</string>
   <string name="setting_page_web_server_error">Error</string>
@@ -891,5 +897,7 @@
   <string name="setting_mcp_page_import_no_valid_config">No valid MCP Server configuration found</string>
   <string name="setting_mcp_page_import_parse_error">JSON parse failed: %1$s</string>
   <string name="setting_mcp_page_import_confirm">Import</string>
+  <string name="setting_display_page_enable_blur_effect_title">Enable Blur Effect</string>
+  <string name="setting_display_page_enable_blur_effect_desc">Enable blur effect on chat input bar</string>
 </resources>
 

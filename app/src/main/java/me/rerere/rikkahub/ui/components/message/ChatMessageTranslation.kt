@@ -43,11 +43,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.Languages
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.X
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.LanguageCircle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import java.util.Locale
@@ -127,7 +127,7 @@ fun LanguageSelectionDialog(
                                 .fillMaxWidth()
                         ) {
                             Icon(
-                                imageVector = Lucide.Languages,
+                                imageVector = HugeIcons.LanguageCircle,
                                 contentDescription = null,
                                 modifier = Modifier.size(24.dp)
                             )
@@ -154,7 +154,7 @@ fun LanguageSelectionDialog(
                                 .fillMaxWidth()
                         ) {
                             Icon(
-                                imageVector = Lucide.X,
+                                imageVector = HugeIcons.Cancel01,
                                 contentDescription = null,
                             )
                             Text(
@@ -195,7 +195,7 @@ fun CollapsibleTranslationText(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Lucide.Languages,
+                    imageVector = HugeIcons.LanguageCircle,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                     tint = MaterialTheme.colorScheme.primary
@@ -214,7 +214,7 @@ fun CollapsibleTranslationText(
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
-                    imageVector = if (isCollapsed) Lucide.ChevronDown else Lucide.ChevronUp,
+                    imageVector = if (isCollapsed) HugeIcons.ArrowDown01 else HugeIcons.ArrowUp01,
                     contentDescription = if (isCollapsed) stringResource(R.string.expand_translation) else stringResource(
                         R.string.collapse_translation
                     ),

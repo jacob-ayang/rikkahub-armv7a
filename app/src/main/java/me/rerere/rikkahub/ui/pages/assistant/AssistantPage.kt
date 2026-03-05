@@ -1,5 +1,11 @@
 package me.rerere.rikkahub.ui.pages.assistant
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +27,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,19 +49,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Copy
-import com.composables.icons.lucide.EllipsisVertical
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.X
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
@@ -73,6 +75,7 @@ import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
+import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -86,6 +89,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
         vm.addAssistant(it)
     }
     val navController = LocalNavController.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // 搜索关键词状态
     var searchQuery by remember { mutableStateOf("") }
@@ -107,23 +111,33 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(title = {
-                Text(stringResource(R.string.assistant_page_title))
-            }, navigationIcon = {
-                BackButton()
-            }, actions = {
-                IconButton(
-                    onClick = {
-                        createState.open(Assistant())
-                    }) {
-                    Icon(Lucide.Plus, stringResource(R.string.assistant_page_add))
-                }
-            })
-        }) {
+            LargeFlexibleTopAppBar(
+                title = {
+                    Text(stringResource(R.string.assistant_page_title))
+                },
+                navigationIcon = {
+                    BackButton()
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            createState.open(Assistant())
+                        }) {
+                        Icon(HugeIcons.Add01, stringResource(R.string.assistant_page_add))
+                    }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
+            )
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(it)
+                .padding(top = 16.dp)
                 .consumeWindowInsets(it),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -148,12 +162,12 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     .padding(horizontal = 16.dp),
                 placeholder = { Text(stringResource(R.string.assistant_page_search_placeholder)) },
                 leadingIcon = {
-                    Icon(Lucide.Search, contentDescription = null)
+                    Icon(HugeIcons.Search01, contentDescription = null)
                 },
                 trailingIcon = {
                     if (searchQuery.isNotBlank()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Lucide.X, contentDescription = null)
+                            Icon(HugeIcons.Cancel01, contentDescription = null)
                         }
                     }
                 },
@@ -387,7 +401,7 @@ private fun AssistantItem(
         modifier = modifier.fillMaxWidth(),
         onClick = onEdit,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = CustomColors.listItemColors.containerColor
         )
     ) {
         Row(
@@ -400,7 +414,9 @@ private fun AssistantItem(
             UIAvatar(
                 name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
                 value = assistant.avatar,
-                modifier = Modifier.size(48.dp).heroAnimation("assistant_${assistant.id}")
+                modifier = Modifier
+                    .size(48.dp)
+                    .heroAnimation("assistant_${assistant.id}")
             )
 
             Column(
@@ -455,7 +471,7 @@ private fun AssistantItem(
                 onClick = onShowActions
             ) {
                 Icon(
-                    imageVector = Lucide.EllipsisVertical,
+                    imageVector = HugeIcons.MoreVertical,
                     contentDescription = stringResource(R.string.assistant_page_actions)
                 )
             }
@@ -506,7 +522,7 @@ private fun AssistantActionSheet(
                 headlineContent = { Text(stringResource(R.string.assistant_page_clone)) },
                 leadingContent = {
                     Icon(
-                        imageVector = Lucide.Copy,
+                        imageVector = HugeIcons.Copy01,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -526,7 +542,7 @@ private fun AssistantActionSheet(
                     },
                     leadingContent = {
                         Icon(
-                            imageVector = Lucide.Trash2,
+                            imageVector = HugeIcons.Delete01,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.error
                         )

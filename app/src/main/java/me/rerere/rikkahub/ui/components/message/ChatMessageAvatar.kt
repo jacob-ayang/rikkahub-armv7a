@@ -51,12 +51,14 @@ fun ChatMessageUserAvatar(
                     maxLines = 1,
                     color = LocalContentColor.current.copy(alpha = 0.85f),
                 )
-                Text(
-                    text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LocalContentColor.current.copy(alpha = 0.6f),
-                    maxLines = 1,
-                )
+                if (settings.displaySetting.showDateBelowName) {
+                    Text(
+                        text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalContentColor.current.copy(alpha = 0.6f),
+                        maxLines = 1,
+                    )
+                }
             }
             UIAvatar(
                 name = nickname,
@@ -80,15 +82,15 @@ fun ChatMessageAssistantAvatar(
     val showIcon = settings.displaySetting.showModelIcon
     if (message.role == MessageRole.ASSISTANT && model != null) {
         Row(
-            modifier = modifier.padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
+            modifier = modifier
         ) {
             if (assistant?.useAssistantAvatar == true) {
                 if (showIcon) {
                     UIAvatar(
                         name = assistant.name,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(32.dp),
                         value = assistant.avatar,
                         loading = loading,
                     )
@@ -99,22 +101,24 @@ fun ChatMessageAssistantAvatar(
                     if(settings.displaySetting.showModelName) {
                         Text(
                             text = assistant.name.ifEmpty { stringResource(R.string.assistant_page_default_assistant) },
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmallEmphasized,
                             maxLines = 1,
                         )
-                        Text(
-                            text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LocalContentColor.current.copy(alpha = 0.8f),
-                            maxLines = 1,
-                        )
+                        if (settings.displaySetting.showDateBelowName) {
+                            Text(
+                                text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = LocalContentColor.current.copy(alpha = 0.8f),
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             } else {
                 if (showIcon) {
                     AutoAIIcon(
                         name = model.modelId,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(32.dp),
                         loading = loading
                     )
                 }
@@ -124,13 +128,15 @@ fun ChatMessageAssistantAvatar(
                     if(settings.displaySetting.showModelName) {
                         Text(
                             text = model.displayName,
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleSmallEmphasized,
                         )
-                        Text(
-                            text = message.createdAt.toJavaLocalDateTime().toLocalString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = LocalContentColor.current.copy(alpha = 0.8f)
-                        )
+                        if (settings.displaySetting.showDateBelowName) {
+                            Text(
+                                text = message.createdAt.toJavaLocalDateTime().toLocalString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LocalContentColor.current.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
             }

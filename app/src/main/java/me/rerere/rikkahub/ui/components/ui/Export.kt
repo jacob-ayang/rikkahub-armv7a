@@ -15,9 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.FileDown
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Share2
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.File01
+import me.rerere.hugeicons.stroke.Share01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.export.ExporterState
 
@@ -46,7 +46,7 @@ fun <T> ExportDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
-                        Icon(Lucide.FileDown, null)
+                        Icon(HugeIcons.File01, null)
                         Column {
                             Text(
                                 text = stringResource(R.string.export_to_file),
@@ -74,7 +74,7 @@ fun <T> ExportDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
-                        Icon(Lucide.Share2, null)
+                        Icon(HugeIcons.Share01, null)
                         Column {
                             Text(
                                 text = stringResource(R.string.export_share),

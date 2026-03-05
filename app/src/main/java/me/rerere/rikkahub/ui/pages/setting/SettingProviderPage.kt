@@ -1,6 +1,14 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import android.net.Uri
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Camera01
+import me.rerere.hugeicons.stroke.DragDropHorizontal
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,8 +44,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -48,20 +56,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Camera
-import com.composables.icons.lucide.GripHorizontal
-import com.composables.icons.lucide.Image
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
 import io.github.g00fy2.quickie.QRResult
 import io.github.g00fy2.quickie.ScanQRCode
@@ -77,6 +78,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -90,6 +92,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
     val lazyListState = rememberLazyStaggeredGridState()
     val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
@@ -111,7 +114,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(text = stringResource(R.string.setting_provider_page_title))
                 },
@@ -149,9 +152,13 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                             )
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors
             )
         },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -167,12 +174,12 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text(stringResource(R.string.setting_provider_page_search_providers)) },
                 leadingIcon = {
-                    Icon(Lucide.Search, contentDescription = null)
+                    Icon(HugeIcons.Search01, contentDescription = null)
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Lucide.X, contentDescription = "Clear")
+                            Icon(HugeIcons.Cancel01, contentDescription = "Clear")
                         }
                     }
                 },
@@ -217,7 +224,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                         )
                                 ) {
                                     Icon(
-                                        imageVector = Lucide.GripHorizontal,
+                                        imageVector = HugeIcons.DragDropHorizontal,
                                         contentDescription = null
                                     )
                                 }
@@ -258,7 +265,7 @@ private fun ImportProviderButton(
             showImportDialog = true
         }
     ) {
-        Icon(Lucide.Import, null)
+        Icon(HugeIcons.FileImport, null)
     }
 
     if (showImportDialog) {
@@ -301,7 +308,7 @@ private fun ImportProviderButton(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(
-                                    imageVector = Lucide.Camera,
+                                    imageVector = HugeIcons.Camera01,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -334,7 +341,7 @@ private fun ImportProviderButton(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(
-                                    imageVector = Lucide.Image,
+                                    imageVector = HugeIcons.Image02,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -451,7 +458,7 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
             dialogState.open(ProviderSetting.OpenAI())
         }
     ) {
-        Icon(Lucide.Plus, "Add")
+        Icon(HugeIcons.Add01, "Add")
     }
 
     if (dialogState.isEditing) {
@@ -502,7 +509,7 @@ private fun ProviderItem(
         modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = if (provider.enabled) {
-                MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+                CustomColors.listItemColors.containerColor
             } else MaterialTheme.colorScheme.errorContainer,
         ),
         onClick = {

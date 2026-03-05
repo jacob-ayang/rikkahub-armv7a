@@ -149,10 +149,12 @@
   <string name="backup_page_export_desc">Экспортировать данные приложения в файл</string>
   <string name="backup_page_exporting">Экспорт…</string>
   <string name="backup_page_files">Файлы</string>
-  <string name="backup_page_import_chatbox_desc">Импорт данных из ChatBox</string>
+  <string name="backup_page_import_chatbox_desc">Импортировать конфигурации поставщика ChatBox</string>
+  <string name="backup_page_import_cherry_studio_desc">Импортировать конфигурации поставщика Cherry Studio</string>
   <string name="backup_page_import_desc">Импортировать локальный файл резервной копии</string>
   <string name="backup_page_import_export">Локальный</string>
   <string name="backup_page_import_from_chatbox">Импорт из ChatBox</string>
+  <string name="backup_page_import_from_cherry_studio">Импорт из Cherry Studio</string>
   <string name="backup_page_import_from_other_app">Импорт из другого приложения</string>
   <string name="backup_page_importing">Импорт…</string>
   <string name="backup_page_loading_failed">Не удалось загрузить файлы резервной копии: %s</string>
@@ -886,5 +888,11 @@
   <string name="setting_mcp_page_import_no_valid_config">Не найдена допустимая конфигурация сервера MCP</string>
   <string name="setting_mcp_page_import_parse_error">Ошибка разбора JSON: %1$s</string>
   <string name="setting_mcp_page_import_confirm">Импорт</string>
+  <string name="setting_display_page_enable_blur_effect_title">Включить эффект размытия</string>
+  <string name="setting_display_page_enable_blur_effect_desc">Включить эффект размытия на панели ввода чата</string>
+  <string name="setting_page_web_server_localhost_only">Только localhost</string>
+  <string name="setting_page_web_server_localhost_only_desc">Принимать запросы только на localhost (127.0.0.1), отключить доступ по LAN и mDNS</string>
+  <string name="setting_display_page_show_date_below_name_title">Показывать дату под именем</string>
+  <string name="setting_display_page_show_date_below_name_desc">Показывать дату сообщения под ником или названием модели</string>
 </resources>
 

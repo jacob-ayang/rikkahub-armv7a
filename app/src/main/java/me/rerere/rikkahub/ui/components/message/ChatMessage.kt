@@ -19,9 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardColors
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -59,10 +56,6 @@ import androidx.compose.ui.util.fastForEachIndexed
 import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import androidx.core.net.toUri
-import com.composables.icons.lucide.File
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Music
-import com.composables.icons.lucide.Video
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.serialization.json.jsonArray
@@ -74,11 +67,14 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.MusicNote03
+import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
-import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -163,6 +159,7 @@ fun ChatMessage(
                 loading = loading,
                 model = model,
                 onToolApproval = onToolApproval,
+                onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
             )
 
             message.translation?.let { translation ->
@@ -258,6 +255,7 @@ private fun MessagePartsBlock(
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
@@ -334,9 +332,11 @@ private fun MessagePartsBlock(
                 is UIMessagePart.Text -> {
                     SelectionContainer {
                         if (role == MessageRole.USER) {
-                            Card(
+                            Surface(
                                 modifier = Modifier.animateContentSize(),
                                 shape = MaterialTheme.shapes.medium,
+                                tonalElevation = 2.dp,
+                                onClick = { onUserMessageClick?.invoke() },
                             ) {
                                 Column(modifier = Modifier.padding(8.dp)) {
                                     MarkdownBlock(
@@ -351,12 +351,10 @@ private fun MessagePartsBlock(
                             }
                         } else {
                             if (settings.displaySetting.showAssistantBubble) {
-                                Card(
+                                Surface(
                                     modifier = Modifier.animateContentSize(),
                                     shape = MaterialTheme.shapes.medium,
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                                    )
+                                    tonalElevation = 2.dp,
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         MarkdownBlock(
@@ -403,7 +401,7 @@ private fun MessagePartsBlock(
                         shape = RoundedCornerShape(8.dp),
                     ) {
                         Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
-                            Icon(Lucide.Video, null)
+                            Icon(HugeIcons.Video01, null)
                         }
                     }
                 }
@@ -433,7 +431,7 @@ private fun MessagePartsBlock(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
-                                    imageVector = Lucide.Music,
+                                    imageVector = HugeIcons.MusicNote03,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -495,7 +493,7 @@ private fun MessagePartsBlock(
 
                                     else -> {
                                         Icon(
-                                            imageVector = Lucide.File,
+                                            imageVector = HugeIcons.File02,
                                             contentDescription = null,
                                             modifier = Modifier.size(20.dp)
                                         )

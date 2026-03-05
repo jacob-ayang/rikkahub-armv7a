@@ -1,5 +1,17 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.AlertCircle
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.MessageBlocked
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Console
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Upload02
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +43,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -45,7 +58,7 @@ import me.rerere.rikkahub.ui.components.ui.SwitchSize
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -60,22 +73,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.CircleAlert
-import com.composables.icons.lucide.ChevronDown
-import com.composables.icons.lucide.ChevronUp
-import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageSquareOff
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Settings
-import com.composables.icons.lucide.Terminal
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.Upload
-import com.composables.icons.lucide.X
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -83,6 +85,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.ai.core.InputSchema
+import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
@@ -96,6 +99,7 @@ import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -124,9 +128,10 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
             ))
     }
     var showImportDialog by remember { mutableStateOf(false) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(stringResource(R.string.setting_mcp_page_title))
                 },
@@ -139,18 +144,22 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                             showImportDialog = true
                         }
                     ) {
-                        Icon(Lucide.Import, null)
+                        Icon(HugeIcons.FileImport, null)
                     }
                     IconButton(
                         onClick = {
                             creationState.open(McpServerConfig.StreamableHTTPServer())
                         }
                     ) {
-                        Icon(Lucide.Plus, null)
+                        Icon(HugeIcons.Add01, null)
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors
             )
-        }
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor
     ) { innerPadding ->
         val mcpManager = koinInject<McpManager>()
         val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
@@ -245,14 +254,14 @@ private fun McpServerItem(
                         scope.launch { dismissBoxState.reset() }
                     }
                 ) {
-                    Icon(Lucide.X, null)
+                    Icon(HugeIcons.Cancel01, null)
                 }
                 FilledTonalIconButton(
                     onClick = {
                         onDelete()
                     }
                 ) {
-                    Icon(Lucide.Trash2, null)
+                    Icon(HugeIcons.Delete01, null)
                 }
             }
         },
@@ -260,7 +269,11 @@ private fun McpServerItem(
         enableDismissFromEndToStart = true,
         modifier = modifier
     ) {
-        Card {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = CustomColors.listItemColors.containerColor
+            )
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -269,18 +282,18 @@ private fun McpServerItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 when (status) {
-                    McpStatus.Idle -> Icon(Lucide.MessageSquareOff, null)
+                    McpStatus.Idle -> Icon(HugeIcons.MessageBlocked, null)
                     McpStatus.Connecting -> CircularProgressIndicator(
                         modifier = Modifier.size(
                             24.dp
                         )
                     )
 
-                    McpStatus.Connected -> Icon(Lucide.Terminal, null)
+                    McpStatus.Connected -> Icon(HugeIcons.McpServer, null)
                     is McpStatus.Reconnecting -> CircularProgressIndicator(
                         modifier = Modifier.size(24.dp)
                     )
-                    is McpStatus.Error -> Icon(Lucide.CircleAlert, null)
+                    is McpStatus.Error -> Icon(HugeIcons.AlertCircle, null)
                 }
 
                 Column(
@@ -325,7 +338,7 @@ private fun McpServerItem(
                         onEdit(item)
                     }
                 ) {
-                    Icon(Lucide.Settings, null)
+                    Icon(HugeIcons.Settings03, null)
                 }
             }
         }
@@ -688,7 +701,7 @@ private fun McpCommonOptionsConfigure(
                             )
                         }) {
                             Icon(
-                                Lucide.Trash2,
+                                HugeIcons.Delete01,
                                 contentDescription = stringResource(R.string.setting_mcp_page_delete_header)
                             )
                         }
@@ -714,7 +727,7 @@ private fun McpCommonOptionsConfigure(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(
-                        Lucide.Plus,
+                        HugeIcons.Add01,
                         contentDescription = stringResource(R.string.setting_mcp_page_add_header)
                     )
                     Spacer(Modifier.width(4.dp))
@@ -788,7 +801,7 @@ private fun McpToolCard(
     var expanded by remember { mutableStateOf(false) }
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = CustomColors.listItemColors.containerColor
         )
     ) {
         Column(
@@ -847,7 +860,7 @@ private fun McpToolCard(
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        if (expanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                        if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )

@@ -16,13 +16,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.composables.icons.lucide.ArrowDown
-import com.composables.icons.lucide.ArrowUp
-import com.composables.icons.lucide.Clock
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Zap
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.ui.UIMessage
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
+import me.rerere.hugeicons.stroke.Clock01
+import me.rerere.hugeicons.stroke.Download04
+import me.rerere.hugeicons.stroke.Upload02
+import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.toFixed
@@ -52,7 +54,7 @@ fun ChatMessageNerdLine(
                     StatsItem(
                         icon = {
                             Icon(
-                                imageVector = Lucide.ArrowUp,
+                                imageVector = HugeIcons.Upload02,
                                 contentDescription = "Input",
                                 tint = color,
                                 modifier = Modifier.size(12.dp)
@@ -72,7 +74,7 @@ fun ChatMessageNerdLine(
                     StatsItem(
                         icon = {
                             Icon(
-                                imageVector = Lucide.ArrowDown,
+                                imageVector = HugeIcons.Download04,
                                 contentDescription = "Output",
                                 modifier = Modifier.size(12.dp)
                             )
@@ -92,7 +94,7 @@ fun ChatMessageNerdLine(
                         StatsItem(
                             icon = {
                                 Icon(
-                                    imageVector = Lucide.Zap,
+                                    imageVector = HugeIcons.Zap,
                                     contentDescription = "Speed",
                                     modifier = Modifier.size(12.dp)
                                 )
@@ -105,7 +107,7 @@ fun ChatMessageNerdLine(
                         StatsItem(
                             icon = {
                                 Icon(
-                                    imageVector = Lucide.Clock,
+                                    imageVector = HugeIcons.Clock01,
                                     contentDescription = "Duration",
                                     modifier = Modifier.size(12.dp)
                                 )

@@ -1,5 +1,14 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Earth
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.FileZip
+import me.rerere.hugeicons.stroke.Mortarboard01
+import me.rerere.hugeicons.stroke.Message01
+import me.rerere.hugeicons.stroke.MessageMultiple01
+import me.rerere.hugeicons.stroke.Notebook01
+import me.rerere.hugeicons.stroke.Tools
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -27,7 +37,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,18 +46,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.Eye
-import com.composables.icons.lucide.FileArchive
-import com.composables.icons.lucide.GraduationCap
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageCircle
-import com.composables.icons.lucide.MessageSquareMore
-import com.composables.icons.lucide.NotebookTabs
-import com.composables.icons.lucide.Settings2
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
@@ -59,23 +61,30 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
 fun SettingModelPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(stringResource(R.string.setting_model_page_title))
                 },
                 navigationIcon = {
                     BackButton()
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
             )
-        }
+        },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { contentPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -126,7 +135,7 @@ private fun DefaultTranslationModelSetting(
             Text(stringResource(R.string.setting_model_page_translate_model_desc))
         },
         icon = {
-            Icon(Lucide.Earth, null)
+            Icon(HugeIcons.Earth, null)
         },
         actions = {
             Box(modifier = Modifier.weight(1f)) {
@@ -150,7 +159,7 @@ private fun DefaultTranslationModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(Lucide.Settings2, null)
+                Icon(HugeIcons.Tools, null)
             }
         }
     )
@@ -222,7 +231,7 @@ private fun DefaultSuggestionModelSetting(
             Text(stringResource(R.string.setting_model_page_suggestion_model_desc))
         },
         icon = {
-            Icon(Lucide.MessageSquareMore, null)
+            Icon(HugeIcons.MessageMultiple01, null)
         },
         actions = {
             Box(modifier = Modifier.weight(1f)) {
@@ -247,7 +256,7 @@ private fun DefaultSuggestionModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(Lucide.Settings2, null)
+                Icon(HugeIcons.Tools, null)
             }
         }
     )
@@ -316,7 +325,7 @@ private fun DefaultTitleModelSetting(
             Text(stringResource(R.string.setting_model_page_title_model_desc))
         },
         icon = {
-            Icon(Lucide.NotebookTabs, null)
+            Icon(HugeIcons.Notebook01, null)
         },
         actions = {
             Box(modifier = Modifier.weight(1f)) {
@@ -341,7 +350,7 @@ private fun DefaultTitleModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(Lucide.Settings2, null)
+                Icon(HugeIcons.Tools, null)
             }
         }
     )
@@ -403,7 +412,7 @@ private fun DefaultChatModelSetting(
 ) {
     ModelFeatureCard(
         icon = {
-            Icon(Lucide.MessageCircle, null)
+            Icon(HugeIcons.Message01, null)
         },
         title = {
             Text(stringResource(R.string.setting_model_page_chat_model), maxLines = 1)
@@ -448,7 +457,7 @@ private fun DefaultOcrModelSetting(
             Text(stringResource(R.string.setting_model_page_ocr_model_desc))
         },
         icon = {
-            Icon(Lucide.Eye, null)
+            Icon(HugeIcons.View, null)
         },
         actions = {
             Box(modifier = Modifier.weight(1f)) {
@@ -472,7 +481,7 @@ private fun DefaultOcrModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(Lucide.Settings2, null)
+                Icon(HugeIcons.Tools, null)
             }
         }
     )
@@ -544,7 +553,7 @@ private fun DefaultCompressModelSetting(
             Text(stringResource(R.string.setting_model_page_compress_model_desc))
         },
         icon = {
-            Icon(Lucide.FileArchive, null)
+            Icon(HugeIcons.FileZip, null)
         },
         actions = {
             Box(modifier = Modifier.weight(1f)) {
@@ -568,7 +577,7 @@ private fun DefaultCompressModelSetting(
                 },
                 colors = IconButtonDefaults.filledTonalIconButtonColors()
             ) {
-                Icon(Lucide.Settings2, null)
+                Icon(HugeIcons.Tools, null)
             }
         }
     )
@@ -634,7 +643,7 @@ private fun ModelFeatureCard(
     OutlinedCard(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.outlinedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = CustomColors.listItemColors.containerColor
         )
     ) {
         Column(

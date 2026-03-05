@@ -1,5 +1,14 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.hugeicons.stroke.StopCircle
+import me.rerere.hugeicons.stroke.DragDropHorizontal
+import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Tools
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.VolumeHigh
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +30,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -29,9 +39,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,19 +51,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.CircleStop
-import com.composables.icons.lucide.GripHorizontal
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Pencil
-import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Settings2
-import com.composables.icons.lucide.Trash2
-import com.composables.icons.lucide.Volume2
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_SYSTEM_TTS_ID
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -64,6 +65,7 @@ import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.pages.setting.components.TTSProviderConfigure
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import me.rerere.tts.provider.TTSProviderSetting
 import org.koin.androidx.compose.koinViewModel
@@ -75,10 +77,11 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     var editingProvider by remember { mutableStateOf<TTSProviderSetting?>(null) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(text = stringResource(R.string.setting_tts_page_title))
                 },
@@ -93,9 +96,13 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
                             )
                         )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors
             )
         },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         val lazyListState = rememberLazyListState()
         val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -138,7 +145,7 @@ fun SettingTTSPage(vm: SettingVM = koinViewModel()) {
                                     )
                             ) {
                                 Icon(
-                                    imageVector = Lucide.GripHorizontal,
+                                    imageVector = HugeIcons.DragDropHorizontal,
                                     contentDescription = null
                                 )
                             }
@@ -243,7 +250,7 @@ private fun AddTTSProviderButton(onAdd: (TTSProviderSetting) -> Unit) {
             showBottomSheet = true
         }
     ) {
-        Icon(Lucide.Plus, stringResource(R.string.setting_tts_page_add_provider_content_description))
+        Icon(HugeIcons.Add01, stringResource(R.string.setting_tts_page_add_provider_content_description))
     }
 
     if (showBottomSheet) {
@@ -326,7 +333,7 @@ private fun TTSProviderItem(
             containerColor = if (isSelected) {
                 MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+                CustomColors.listItemColors.containerColor
             }
         )
     ) {
@@ -404,7 +411,7 @@ private fun TTSProviderItem(
                         }
                     ) {
                         Icon(
-                            imageVector = if (isSpeaking) Lucide.CircleStop else Lucide.Volume2,
+                            imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
                             contentDescription = if (isSpeaking) stringResource(R.string.stop) else stringResource(R.string.test_tts),
                             tint = if (isSpeaking) MaterialTheme.colorScheme.error else LocalContentColor.current
                         )
@@ -415,7 +422,7 @@ private fun TTSProviderItem(
                     onClick = { showDropdownMenu = true }
                 ) {
                     Icon(
-                        imageVector = Lucide.Settings2,
+                        imageVector = HugeIcons.Tools,
                         contentDescription = stringResource(R.string.setting_tts_page_more_options_content_description)
                     )
                     DropdownMenu(
@@ -429,7 +436,7 @@ private fun TTSProviderItem(
                                 onEdit()
                             },
                             leadingIcon = {
-                                Icon(Lucide.Pencil, contentDescription = null)
+                                Icon(HugeIcons.PencilEdit01, contentDescription = null)
                             }
                         )
                         DropdownMenuItem(
@@ -439,7 +446,7 @@ private fun TTSProviderItem(
                                 onDelete()
                             },
                             leadingIcon = {
-                                Icon(Lucide.Trash2, contentDescription = null)
+                                Icon(HugeIcons.Delete01, contentDescription = null)
                             },
                             enabled = provider.id != DEFAULT_SYSTEM_TTS_ID
                         )

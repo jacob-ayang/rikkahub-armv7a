@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.search
 
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Refresh01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,19 +25,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.RefreshCw
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -46,6 +48,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
@@ -59,6 +62,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
     val navController = LocalNavController.current
     val focusRequester = remember { FocusRequester() }
     var showRebuildDialog by remember { mutableStateOf(false) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
@@ -89,7 +93,7 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            LargeFlexibleTopAppBar(
                 navigationIcon = { BackButton() },
                 title = { Text(stringResource(R.string.search_page_title)) },
                 actions = {
@@ -97,11 +101,18 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                         onClick = { showRebuildDialog = true },
                         enabled = !vm.isRebuilding,
                     ) {
-                        Icon(Lucide.RefreshCw, contentDescription = stringResource(R.string.search_page_rebuild_button))
+                        Icon(
+                            HugeIcons.Refresh01,
+                            contentDescription = stringResource(R.string.search_page_rebuild_button)
+                        )
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
             )
         },
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = CustomColors.topBarColors.containerColor,
     ) { contentPadding ->
         Column(
             modifier = Modifier
@@ -236,7 +247,7 @@ private fun SearchResultItem(
 
     Surface(
         onClick = onClick,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = CustomColors.listItemColors.containerColor,
         shape = MaterialTheme.shapes.large,
     ) {
         Column(
