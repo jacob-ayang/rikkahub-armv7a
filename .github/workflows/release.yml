@@ -83,8 +83,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 36
-          ndk-version: 27.0.11902837
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;27.0.11902837
 
       - name: Validate required secrets
         run: |
@@ -178,6 +181,22 @@ jobs:
             fi
           done
 
+      - name: Verify ucrop dependency is reachable
+        run: |
+          set -euo pipefail
+
+          URLS=(
+            "https://jitpack.io/com/github/yalantis/ucrop/2.2.11-native/ucrop-2.2.11-native.pom"
+            "https://jitpack.io/com/github/yalantis/ucrop/2.2.11-native/ucrop-2.2.11-native.aar"
+          )
+
+          for url in "${URLS[@]}"; do
+            if ! curl -fsSIL --retry 3 --retry-all-errors --retry-delay 2 "$url" >/dev/null; then
+              echo "ERROR: External dependency repository unavailable: $url"
+              exit 1
+            fi
+          done
+
       - name: Build ARMv7a and Universal APK
         run: |
           set -euo pipefail
@@ -229,14 +248,6 @@ jobs:
             unzip -l "$ARMV7_APK" | grep "lib/armeabi-v7a/" || true
             exit 1
           fi
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk-${{ steps.meta.outputs.release_tag }}
-          path: build-output/*.apk
-          if-no-files-found: error
-          retention-days: 30
 
       - name: Create or update GitHub release
         uses: ncipollo/release-action@v1

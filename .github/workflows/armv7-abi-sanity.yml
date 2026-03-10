@@ -64,6 +64,7 @@ jobs:
           name: armv7-abi-static-${{ github.run_id }}
           path: build-output/*
           if-no-files-found: error
+          retention-days: 3
 
   armv7-apk-packaging-check:
     runs-on: ubuntu-latest
@@ -83,8 +84,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 36
-          ndk-version: 27.0.11902837
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;27.0.11902837
 
       - name: Prepare google-services.json
         run: |
@@ -136,6 +140,7 @@ jobs:
           name: armv7-abi-packaging-${{ github.run_id }}
           path: build-output/*
           if-no-files-found: error
+          retention-days: 3
 
       - name: Cleanup secrets
         if: always()
