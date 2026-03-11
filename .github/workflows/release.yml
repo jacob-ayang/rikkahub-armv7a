@@ -182,6 +182,7 @@ jobs:
           done
 
       - name: Verify ucrop dependency is reachable
+        id: ucrop_check
         run: |
           set -euo pipefail
 
@@ -190,12 +191,32 @@ jobs:
             "https://jitpack.io/com/github/yalantis/ucrop/2.2.11-native/ucrop-2.2.11-native.aar"
           )
 
+          STATUS="ok"
+          FAILED_URLS=()
+
           for url in "${URLS[@]}"; do
-            if ! curl -fsSIL --retry 3 --retry-all-errors --retry-delay 2 "$url" >/dev/null; then
-              echo "ERROR: External dependency repository unavailable: $url"
-              exit 1
+            if ! curl -fsSL -o /dev/null --retry 3 --retry-all-errors --retry-delay 2 "$url"; then
+              STATUS="warning"
+              FAILED_URLS+=("$url")
+              echo "::warning::External dependency probe failed: $url"
             fi
           done
+
+          FAILED_URLS_JOINED=""
+          if [ "${#FAILED_URLS[@]}" -gt 0 ]; then
+            FAILED_URLS_JOINED="$(printf '%s\n' "${FAILED_URLS[@]}" | paste -sd ',' -)"
+            {
+              echo "### Dependency Probe Warning"
+              echo ""
+              echo "The uCrop availability probe failed for:"
+              printf '%s\n' "${FAILED_URLS[@]}"
+              echo ""
+              echo "Continuing to Gradle resolution to distinguish probe false-positives from real dependency failures."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "failed_urls=$FAILED_URLS_JOINED" >> "$GITHUB_OUTPUT"
 
       - name: Build ARMv7a and Universal APK
         run: |
@@ -284,6 +305,7 @@ jobs:
             echo "| Source Ref | \`${{ steps.params.outputs.source_ref }}\` |"
             echo "| Mode | \`${{ steps.params.outputs.release_mode }}\` |"
             echo "| Tag | \`${{ steps.meta.outputs.release_tag }}\` |"
+            echo "| uCrop Probe | \`${{ steps.ucrop_check.outputs.status }}\` |"
             echo "| ARMv7a APK | \`${{ steps.artifacts.outputs.armv7_name }}\` |"
             echo "| Universal APK | \`${{ steps.artifacts.outputs.universal_name }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
