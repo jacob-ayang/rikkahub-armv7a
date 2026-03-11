@@ -233,8 +233,8 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
-    // ucrop
-    implementation(libs.ucrop)
+    // Vendor ucrop locally because JitPack intermittently fails to resolve on GitHub runners.
+    implementation(files("libs/ucrop-2.2.11-native.aar"))
 
     // pebble (template engine)
     implementation(libs.pebble)
