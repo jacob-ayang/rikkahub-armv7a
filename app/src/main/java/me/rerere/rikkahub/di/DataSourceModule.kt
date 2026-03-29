@@ -187,25 +187,25 @@ val dataSourceModule = module {
 
                 chain.proceed(requestBuilder.build())
             }
-            .addInterceptor { chain ->
+            .addNetworkInterceptor { chain ->
                 val request = chain.request()
-                val contentType = request.body?.contentType()
-                if (contentType?.charset() != null) {
+                val contentTypeHeader = request.header("Content-Type")
+                if (contentTypeHeader != null && contentTypeHeader.contains(";")) {
                     chain.proceed(
                         request.newBuilder()
-                            .header("Content-Type", "${contentType.type}/${contentType.subtype}")
+                            .header("Content-Type", contentTypeHeader.substringBefore(";").trim())
                             .build()
                     )
                 } else {
                     chain.proceed(request)
                 }
             }
-            .addInterceptor(RequestLoggingInterceptor())
+            .addNetworkInterceptor(RequestLoggingInterceptor())
             .addInterceptor(AIRequestInterceptor(remoteConfig = get()))
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.HEADERS
             })
-            .build().also { SearchService.init(it) }
+            .build().also { SearchService.init(it, get()) }
     }
 
     single {
@@ -213,7 +213,7 @@ val dataSourceModule = module {
     }
 
     single {
-        ProviderManager(client = get())
+        ProviderManager(client = get(), context = get())
     }
 
     single {

@@ -152,6 +152,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             description = """
                 Read or write plain text from the device clipboard.
                 Use action: read or write. For write, provide text.
+                Do NOT write to the clipboard unless the user has explicitly requested it.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
@@ -269,6 +270,21 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                                         put("items", buildJsonObject {
                                             put("type", "string")
                                         })
+                                    })
+                                    put("selection_type", buildJsonObject {
+                                        put("type", "string")
+                                        put(
+                                            "enum",
+                                            kotlinx.serialization.json.buildJsonArray {
+                                                add("text")
+                                                add("single")
+                                                add("multi")
+                                            }
+                                        )
+                                        put(
+                                            "description",
+                                            "Answer type: text (free text input, default), single (select exactly one option), multi (select one or more options)"
+                                        )
                                     })
                                 })
                                 put("required", kotlinx.serialization.json.buildJsonArray {

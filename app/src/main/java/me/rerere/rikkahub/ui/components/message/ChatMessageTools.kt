@@ -69,6 +69,7 @@ import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Eraser
 import me.rerere.hugeicons.stroke.GlobalSearch
+import me.rerere.hugeicons.stroke.MagicWand01
 import me.rerere.hugeicons.stroke.QuillWrite01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.Search01
@@ -103,6 +104,7 @@ private object ToolNames {
     const val CLIPBOARD = "clipboard_tool"
     const val TTS = "text_to_speech"
     const val ASK_USER = "ask_user"
+    const val USE_SKILL = "use_skill"
 }
 
 private object MemoryActions {
@@ -129,6 +131,7 @@ private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
     ToolNames.CLIPBOARD -> HugeIcons.Clipboard
     ToolNames.TTS -> HugeIcons.VolumeHigh
     ToolNames.ASK_USER -> HugeIcons.BubbleChatQuestion
+    ToolNames.USE_SKILL -> HugeIcons.MagicWand01
     else -> HugeIcons.Tools
 }
 
@@ -194,6 +197,12 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                 if (text.length > 24) text.take(24) + "…" else text
             } ?: ""
             "Speaking: $preview"
+        }
+
+        ToolNames.USE_SKILL -> {
+            val skillName = arguments.getStringContent("name") ?: ""
+            val path = arguments.getStringContent("path")
+            if (path != null) "Skill: $skillName / $path" else "Skill: $skillName"
         }
 
         else -> stringResource(R.string.chat_message_tool_call_generic, tool.toolName)
@@ -705,14 +714,17 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                 AskUserQuestion(
                     id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "",
                     question = obj["question"]?.jsonPrimitive?.contentOrNull ?: "",
-                    options = obj["options"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+                    options = obj["options"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
+                    selectionType = obj["selection_type"]?.jsonPrimitive?.contentOrNull ?: "text"
                 )
             } ?: emptyList()
         }.getOrElse { emptyList() }
     }
 
-    // Track answers for each question
+    // Track answers for text/single questions
     val answers = remember { mutableStateMapOf<String, String>() }
+    // Track selected options for multi questions
+    val multiAnswers = remember { mutableStateMapOf<String, Set<String>>() }
 
     val firstQuestion = questions.firstOrNull()?.question ?: "..."
 
@@ -753,46 +765,98 @@ private fun ChainOfThoughtScope.AskUserToolStep(
             ) {
                 questions.forEach { q ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (questions.size > 1) {
-                            Text(
-                                text = q.question,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
+                        Text(
+                            text = q.question,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
 
                         if (isPending && onToolAnswer != null) {
-                            // Show options as chips
-                            if (q.options.isNotEmpty()) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    q.options.forEach { option ->
-                                        FilterChip(
-                                            selected = answers[q.id] == option,
-                                            onClick = { answers[q.id] = option },
-                                            label = {
-                                                Text(
-                                                    text = option,
-                                                    style = MaterialTheme.typography.labelSmall,
+                            when (q.selectionType) {
+                                "single" -> {
+                                    // Single select: chips only, no text input
+                                    if (q.options.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            q.options.forEach { option ->
+                                                FilterChip(
+                                                    selected = answers[q.id] == option,
+                                                    onClick = { answers[q.id] = option },
+                                                    label = {
+                                                        Text(
+                                                            text = option,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                        )
+                                                    },
                                                 )
-                                            },
-                                        )
+                                            }
+                                        }
                                     }
                                 }
-                            }
+                                "multi" -> {
+                                    // Multi select: chips only, multiple can be selected
+                                    if (q.options.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            q.options.forEach { option ->
+                                                val selectedSet = multiAnswers[q.id] ?: emptySet()
+                                                FilterChip(
+                                                    selected = selectedSet.contains(option),
+                                                    onClick = {
+                                                        val current = selectedSet.toMutableSet()
+                                                        if (current.contains(option)) current.remove(option)
+                                                        else current.add(option)
+                                                        multiAnswers[q.id] = current
+                                                    },
+                                                    label = {
+                                                        Text(
+                                                            text = option,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    // Text (default): optional option chips + free text input
+                                    if (q.options.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        ) {
+                                            q.options.forEach { option ->
+                                                FilterChip(
+                                                    selected = answers[q.id] == option,
+                                                    onClick = { answers[q.id] = option },
+                                                    label = {
+                                                        Text(
+                                                            text = option,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
 
-                            // Free text input
-                            OutlinedTextField(
-                                value = answers[q.id] ?: "",
-                                onValueChange = { answers[q.id] = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = MaterialTheme.typography.bodySmall,
-                                singleLine = false,
-                                minLines = 1,
-                                maxLines = 3,
-                            )
+                                    // Free text input
+                                    OutlinedTextField(
+                                        value = answers[q.id] ?: "",
+                                        onValueChange = { answers[q.id] = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textStyle = MaterialTheme.typography.bodySmall,
+                                        singleLine = false,
+                                        minLines = 1,
+                                        maxLines = 3,
+                                    )
+                                }
+                            }
                         } else if (isAnswered) {
                             // Show the user's answer
                             val answeredState = tool.approvalState as ToolApprovalState.Answered
@@ -818,13 +882,21 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                             val answerPayload = buildJsonObject {
                                 put("answers", buildJsonObject {
                                     questions.forEach { q ->
-                                        put(q.id, JsonPrimitive(answers[q.id] ?: ""))
+                                        when (q.selectionType) {
+                                            "multi" -> put(q.id, JsonPrimitive(multiAnswers[q.id]?.joinToString(", ") ?: ""))
+                                            else -> put(q.id, JsonPrimitive(answers[q.id] ?: ""))
+                                        }
                                     }
                                 })
                             }
                             onToolAnswer(tool.toolCallId, answerPayload.toString())
                         },
-                        enabled = questions.all { q -> !answers[q.id].isNullOrBlank() },
+                        enabled = questions.all { q ->
+                            when (q.selectionType) {
+                                "multi" -> !multiAnswers[q.id].isNullOrEmpty()
+                                else -> !answers[q.id].isNullOrBlank()
+                            }
+                        },
                         modifier = Modifier.align(Alignment.End),
                     ) {
                         Icon(
@@ -847,6 +919,7 @@ private data class AskUserQuestion(
     val id: String,
     val question: String,
     val options: List<String>,
+    val selectionType: String = "text", // "text" | "single" | "multi"
 )
 
 @Composable
