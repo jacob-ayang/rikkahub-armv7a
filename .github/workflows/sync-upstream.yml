@@ -156,14 +156,23 @@ jobs:
               core.setOutput("branch", "");
             }
 
-      - name: Prepare sync branch and merge upstream
+      - name: Prepare sync branch from upstream and apply fork overlay
         if: steps.compare.outputs.has_new_commits == 'true'
         id: merge
         run: |
           set -euo pipefail
 
           UPSTREAM_SHA="${{ steps.compare.outputs.upstream_sha }}"
+          LOCAL_SHA="${{ steps.compare.outputs.local_sha }}"
           EXISTING_BRANCH="${{ steps.find_pr.outputs.branch }}"
+          OVERLAY_PATHS=(
+            ".github/workflows/release.yml"
+            ".github/workflows/armv7-abi-sanity.yml"
+            ".github/workflows/armv7-smoke-check.yml"
+            "app/build.gradle.kts"
+            "app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt"
+            "app/src/main/jniLibs"
+          )
 
           if [ -n "$EXISTING_BRANCH" ]; then
             SYNC_BRANCH="$EXISTING_BRANCH"
@@ -171,36 +180,57 @@ jobs:
             SYNC_BRANCH="sync/upstream-$(date -u +'%Y%m%d-%H%M')-${UPSTREAM_SHA:0:7}"
           fi
 
+          BEFORE_SHA=""
           if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1; then
             git fetch origin "$SYNC_BRANCH"
-            git checkout -B "$SYNC_BRANCH" "origin/$SYNC_BRANCH"
+            BEFORE_SHA="$(git rev-parse "origin/$SYNC_BRANCH")"
+          fi
+
+          git checkout -B "$SYNC_BRANCH" upstream/master
+
+          for path in "${OVERLAY_PATHS[@]}"; do
+            git checkout "$LOCAL_SHA" -- "$path"
+          done
+
+          CONFLICT_FILES=()
+
+          if ! grep -q 'flavorDimensions += "arch"' app/build.gradle.kts; then
+            CONFLICT_FILES+=("app/build.gradle.kts")
+          fi
+
+          if ! grep -q 'create("armv7")' app/build.gradle.kts; then
+            CONFLICT_FILES+=("app/build.gradle.kts")
+          fi
+
+          if ! grep -q 'useLegacyPackaging = true' app/build.gradle.kts; then
+            CONFLICT_FILES+=("app/build.gradle.kts")
+          fi
+
+          if [ ! -f 'app/src/main/jniLibs/armeabi-v7a/libsimple.so' ]; then
+            CONFLICT_FILES+=("app/src/main/jniLibs/armeabi-v7a/libsimple.so")
+          fi
+
+          if ! grep -q 'libsimple' app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt; then
+            CONFLICT_FILES+=("app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt")
+          fi
+
+          if [ "${#CONFLICT_FILES[@]}" -gt 0 ]; then
+            CONFLICT_FILES_JOINED="$(printf '%s\n' "${CONFLICT_FILES[@]}" | awk '!seen[$0]++' | paste -sd ',' -)"
+            echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
+            echo "merge_conflict=true" >> "$GITHUB_OUTPUT"
+            echo "branch_updated=false" >> "$GITHUB_OUTPUT"
+            echo "conflict_files=$CONFLICT_FILES_JOINED" >> "$GITHUB_OUTPUT"
+            echo "ERROR: Fork overlay validation failed on top of upstream/master"
+            exit 1
+          fi
+
+          git add "${OVERLAY_PATHS[@]}"
+
+          AFTER_TREE="$(git write-tree)"
+          if [ -n "$BEFORE_SHA" ] && [ "$AFTER_TREE" = "$(git rev-parse "${BEFORE_SHA}^{tree}")" ]; then
+            BRANCH_UPDATED="false"
           else
-            git checkout -B "$SYNC_BRANCH" master
-          fi
-
-          BEFORE_SHA="$(git rev-parse HEAD)"
-
-          set +e
-          git merge --no-ff --no-edit upstream/master
-          MERGE_EXIT="$?"
-          set -e
-
-          if [ "$MERGE_EXIT" -ne 0 ]; then
-            if git ls-files -u | grep -q '.'; then
-              CONFLICT_FILES="$(git diff --name-only --diff-filter=U | paste -sd ',' -)"
-              echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
-              echo "merge_conflict=true" >> "$GITHUB_OUTPUT"
-              echo "branch_updated=false" >> "$GITHUB_OUTPUT"
-              echo "conflict_files=$CONFLICT_FILES" >> "$GITHUB_OUTPUT"
-              echo "ERROR: Merge conflicts detected between master and upstream/master"
-              exit 1
-            fi
-            exit "$MERGE_EXIT"
-          fi
-
-          AFTER_SHA="$(git rev-parse HEAD)"
-          BRANCH_UPDATED="false"
-          if [ "$BEFORE_SHA" != "$AFTER_SHA" ]; then
+            git commit -m "chore: sync upstream (${UPSTREAM_SHA:0:7})"
             BRANCH_UPDATED="true"
           fi
 
@@ -394,7 +424,7 @@ jobs:
 
           HAS_NEW_COMMITS="${{ steps.compare.outputs.has_new_commits }}"
           HAS_NEW_UPSTREAM_RELEASE="${{ steps.release_check.outputs.has_new_upstream_release }}"
-          MERGE_CONFLICT="${{ steps.merge.outputs.merge_conflict }}"
+          OVERLAY_CONFLICT="${{ steps.merge.outputs.merge_conflict }}"
           BRANCH_UPDATED="${{ steps.merge.outputs.branch_updated }}"
           SYNC_BRANCH="${{ steps.merge.outputs.sync_branch }}"
           UPSTREAM_TAG="${{ steps.upstream_release.outputs.tag }}"
@@ -405,8 +435,8 @@ jobs:
           FINAL_UPSTREAM_TAG=""
 
           if [ "$HAS_NEW_UPSTREAM_RELEASE" = "true" ]; then
-            if [ "$HAS_NEW_COMMITS" = "true" ] && [ "$MERGE_CONFLICT" = "true" ]; then
-              echo "ERROR: Merge conflict detected, stop automatic release."
+            if [ "$HAS_NEW_COMMITS" = "true" ] && [ "$OVERLAY_CONFLICT" = "true" ]; then
+              echo "ERROR: Overlay validation failed, stop automatic release."
               exit 1
             fi
             SHOULD_TRIGGER_RELEASE="true"
@@ -418,8 +448,8 @@ jobs:
               SOURCE_REF="master"
             fi
           elif [ "$HAS_NEW_COMMITS" = "true" ]; then
-            if [ "$MERGE_CONFLICT" = "true" ]; then
-              echo "ERROR: Merge conflict detected, stop automatic prerelease."
+            if [ "$OVERLAY_CONFLICT" = "true" ]; then
+              echo "ERROR: Overlay validation failed, stop automatic prerelease."
               exit 1
             fi
             if [ "$BRANCH_UPDATED" = "true" ] && [ -n "$SYNC_BRANCH" ]; then
