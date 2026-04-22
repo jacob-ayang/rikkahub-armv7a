@@ -336,6 +336,17 @@ sealed class ToolApprovalState {
     data class Answered(val answer: String) : ToolApprovalState()
 }
 
+fun ToolApprovalState.canResumeToolExecution(): Boolean {
+    return when (this) {
+        ToolApprovalState.Approved -> true
+        is ToolApprovalState.Denied -> true
+        is ToolApprovalState.Answered -> true
+        ToolApprovalState.Auto,
+        ToolApprovalState.Pending,
+            -> false
+    }
+}
+
 @Serializable
 sealed class UIMessagePart {
     abstract val metadata: JsonObject?
@@ -441,6 +452,9 @@ sealed class UIMessagePart {
         /** Whether the tool is pending user approval */
         val isPending: Boolean get() = approvalState is ToolApprovalState.Pending
 
+        /** Whether generation can resume and handle this tool immediately */
+        val canResumeExecution: Boolean get() = !isExecuted && approvalState.canResumeToolExecution()
+
         /** Parse input string as JsonElement */
         fun inputAsJson(): JsonElement = runCatching {
             json.parseToJsonElement(input.ifBlank { "{}" })
@@ -514,6 +528,27 @@ fun UIMessage.finishReasoning(): UIMessage {
             }
         }
     )
+}
+
+fun UIMessage.finishPendingTools(
+    transform: (UIMessagePart.Tool) -> UIMessagePart.Tool
+): UIMessage {
+    val updatedParts = parts.map { part ->
+        if (part is UIMessagePart.Tool && !part.isExecuted) {
+            transform(part)
+        } else {
+            part
+        }
+    }
+
+    if (updatedParts == parts) {
+        return this
+    }
+
+    return copy(
+        parts = updatedParts,
+        finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+    ).finishReasoning()
 }
 
 /**

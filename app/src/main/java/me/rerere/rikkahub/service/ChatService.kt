@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
@@ -40,6 +41,8 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.canResumeToolExecution
+import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.Logging
@@ -455,10 +458,10 @@ class ChatService(
         }
 
         runCatching {
-            val conversation = getConversationFlow(conversationId).value
+            val initialConversation = getConversationFlow(conversationId).value
 
             // reset suggestions
-            updateConversation(conversationId, conversation.copy(chatSuggestions = emptyList()))
+            updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
@@ -473,6 +476,7 @@ class ChatService(
 
             // check invalid messages
             checkInvalidMessages(conversationId)
+            val conversation = getConversationFlow(conversationId).value
 
             // start generating
             generationHandler.generateText(
@@ -584,16 +588,16 @@ class ChatService(
         var messagesNodes = conversation.messageNodes
 
         // 移除无效 tool (未执行的 Tool)
-        messagesNodes = messagesNodes.mapIndexed { index, node ->
+        messagesNodes = messagesNodes.mapIndexed { _, node ->
             // Check for Tool type with non-executed tools
             val hasPendingTools = node.currentMessage.getTools().any { !it.isExecuted }
 
             if (hasPendingTools) {
-                // Skip removal if any tool is Approved (waiting to be executed)
-                val hasApprovedTool = node.currentMessage.getTools().any {
-                    it.approvalState is ToolApprovalState.Approved
+                // Keep messages that are ready to resume, such as approved/denied/answered tools.
+                val hasResumableTool = node.currentMessage.getTools().any {
+                    !it.isExecuted && it.approvalState.canResumeToolExecution()
                 }
-                if (hasApprovedTool) {
+                if (hasResumableTool) {
                     return@mapIndexed node
                 }
 
@@ -603,7 +607,7 @@ class ChatService(
                     return@mapIndexed node
                 }
 
-                // Remove message with pending non-approved tools
+                // Remove messages that still have unresolved tool approvals.
                 return@mapIndexed node.copy(
                     messages = node.messages.filter { it.id != node.currentMessage.id },
                     selectIndex = node.selectIndex - 1
@@ -625,6 +629,17 @@ class ChatService(
         messagesNodes = messagesNodes.filter { it.messages.isNotEmpty() }
 
         updateConversation(conversationId, conversation.copy(messageNodes = messagesNodes))
+    }
+
+    private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {
+        return tool.copy(
+            output = listOf(
+                UIMessagePart.Text(
+                    """{"status":"cancelled","error":"Generation cancelled by user before tool execution completed."}"""
+                )
+            ),
+            approvalState = ToolApprovalState.Denied("Generation cancelled by user")
+        )
     }
 
     // ---- 生成标题 ----
@@ -659,7 +674,7 @@ class ChatService(
                 ),
                 params = TextGenerationParams(
                     model = model,
-                    thinkingBudget = 0,
+                    reasoningLevel = ReasoningLevel.OFF,
                 ),
             )
 
@@ -704,7 +719,7 @@ class ChatService(
                 ),
                 params = TextGenerationParams(
                     model = model,
-                    thinkingBudget = 0,
+                    reasoningLevel = ReasoningLevel.OFF,
                 ),
             )
             val suggestions =
@@ -1224,7 +1239,26 @@ class ChatService(
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
-    fun stopGeneration(conversationId: Uuid) {
-        sessions[conversationId]?.getJob()?.cancel()
+    suspend fun stopGeneration(conversationId: Uuid) {
+        val job = sessions[conversationId]?.getJob() ?: return
+        job.cancel()
+        runCatching { job.join() }
+
+        val currentConversation = getConversationFlow(conversationId).value
+        val lastNode = currentConversation.messageNodes.lastOrNull() ?: return
+        val lastMessage = lastNode.currentMessage
+        val updatedMessage = lastMessage.finishPendingTools(::cancelToolByUser)
+        if (updatedMessage == lastMessage) {
+            return
+        }
+
+        val updatedConversation = currentConversation.copy(
+            messageNodes = currentConversation.messageNodes.dropLast(1) + lastNode.copy(
+                messages = lastNode.messages.map { message ->
+                    if (message.id == lastMessage.id) updatedMessage else message
+                }
+            )
+        )
+        saveConversation(conversationId, updatedConversation)
     }
 }

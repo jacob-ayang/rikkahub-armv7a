@@ -80,8 +80,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
         return if (!providerSetting.vertexAI) {
             "${providerSetting.baseUrl}/$path".toHttpUrl()
-        } else {
+        } else if (providerSetting.useServiceAccount) {
             "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/$path".toHttpUrl()
+        } else {
+            "https://aiplatform.googleapis.com/v1/$path".toHttpUrl()
         }
     }
 
@@ -89,7 +91,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Google,
         request: Request
     ): Request {
-        return if (providerSetting.vertexAI) {
+        return if (providerSetting.vertexAI && providerSetting.useServiceAccount) {
             val accessToken = serviceAccountTokenProvider.fetchAccessToken(
                 serviceAccountEmail = providerSetting.serviceAccountEmail.trim(),
                 privateKeyPem = StringEscapeUtils.unescapeJson(providerSetting.privateKey.trim()),
@@ -99,9 +101,15 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .build()
         } else {
             val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
-            request.newBuilder()
-                .addHeader("x-goog-api-key", key)
-                .build()
+            if (providerSetting.vertexAI) {
+                request.newBuilder()
+                    .url(request.url.newBuilder().addQueryParameter("key", key).build())
+                    .build()
+            } else {
+                request.newBuilder()
+                    .addHeader("x-goog-api-key", key)
+                    .build()
+            }
         }
     }
 
@@ -372,12 +380,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     val isGeminiPro =
                         params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
 
-                    when (params.thinkingBudget) {
-                        null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
+                    when (params.reasoningLevel) {
+                        ReasoningLevel.AUTO -> {} // 自动模式，不设置参数
 
-                        0 -> {
-                            // disable thinking if not gemini pro
-                            if (!isGeminiPro) {
+                        ReasoningLevel.OFF -> {
+                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                                put("thinkingLevel", "minimal")
+                            } else if (!isGeminiPro) {
                                 put("thinkingBudget", 0)
                                 put("includeThoughts", false)
                             }
@@ -385,14 +394,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
                         else -> {
                             if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
-                                when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
-                                    ReasoningLevel.HIGH -> put("thinkingLevel", "high")
-                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
+                                when (params.reasoningLevel) {
                                     ReasoningLevel.LOW -> put("thinkingLevel", "low")
-                                    else -> error("Unknown reasoning level: $level")
+                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "medium")
+                                    else -> put("thinkingLevel", "high") // HIGH, XHIGH
                                 }
                             } else {
-                                put("thinkingBudget", params.thinkingBudget)
+                                put("thinkingBudget", params.reasoningLevel.budgetTokens)
                             }
                         }
                     }
