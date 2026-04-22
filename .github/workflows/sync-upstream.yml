@@ -165,13 +165,13 @@ jobs:
           UPSTREAM_SHA="${{ steps.compare.outputs.upstream_sha }}"
           LOCAL_SHA="${{ steps.compare.outputs.local_sha }}"
           EXISTING_BRANCH="${{ steps.find_pr.outputs.branch }}"
-          OVERLAY_PATHS=(
+          FORK_ONLY_PATHS=(
             ".github/workflows/release.yml"
             ".github/workflows/armv7-abi-sanity.yml"
             ".github/workflows/armv7-smoke-check.yml"
-            "app/build.gradle.kts"
-            "app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt"
+            "docs/native/libsimple.md"
             "app/src/main/jniLibs"
+            "libs/ucrop-2.2.11-native.aar"
           )
 
           if [ -n "$EXISTING_BRANCH" ]; then
@@ -180,19 +180,44 @@ jobs:
             SYNC_BRANCH="sync/upstream-$(date -u +'%Y%m%d-%H%M')-${UPSTREAM_SHA:0:7}"
           fi
 
-          BEFORE_SHA=""
           if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1; then
             git fetch origin "$SYNC_BRANCH"
-            BEFORE_SHA="$(git rev-parse "origin/$SYNC_BRANCH")"
+            git checkout -B "$SYNC_BRANCH" "origin/$SYNC_BRANCH"
+          else
+            git checkout -B "$SYNC_BRANCH" master
           fi
 
-          git checkout -B "$SYNC_BRANCH" upstream/master
+          BEFORE_SHA="$(git rev-parse HEAD)"
 
-          for path in "${OVERLAY_PATHS[@]}"; do
+          set +e
+          git merge --no-ff --no-edit upstream/master
+          MERGE_EXIT="$?"
+          set -e
+
+          if [ "$MERGE_EXIT" -ne 0 ]; then
+            if git ls-files -u | grep -q '.'; then
+              CONFLICT_FILES="$(git diff --name-only --diff-filter=U | paste -sd ',' -)"
+              git merge --abort || true
+              echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
+              echo "merge_conflict=true" >> "$GITHUB_OUTPUT"
+              echo "overlay_conflict=false" >> "$GITHUB_OUTPUT"
+              echo "branch_updated=false" >> "$GITHUB_OUTPUT"
+              echo "conflict_files=$CONFLICT_FILES" >> "$GITHUB_OUTPUT"
+              echo "ERROR: Git merge conflicts detected between master and upstream/master"
+              exit 1
+            fi
+            exit "$MERGE_EXIT"
+          fi
+
+          for path in "${FORK_ONLY_PATHS[@]}"; do
             git checkout "$LOCAL_SHA" -- "$path"
           done
 
           CONFLICT_FILES=()
+
+          if [ ! -f 'app/src/main/jniLibs/armeabi-v7a/libsimple.so' ]; then
+            CONFLICT_FILES+=("app/src/main/jniLibs/armeabi-v7a/libsimple.so")
+          fi
 
           if ! grep -q 'flavorDimensions += "arch"' app/build.gradle.kts; then
             CONFLICT_FILES+=("app/build.gradle.kts")
@@ -202,32 +227,60 @@ jobs:
             CONFLICT_FILES+=("app/build.gradle.kts")
           fi
 
-          if ! grep -q 'useLegacyPackaging = true' app/build.gradle.kts; then
+          if ! grep -q 'assembleArmv7Release' app/build.gradle.kts; then
             CONFLICT_FILES+=("app/build.gradle.kts")
           fi
 
-          if [ ! -f 'app/src/main/jniLibs/armeabi-v7a/libsimple.so' ]; then
-            CONFLICT_FILES+=("app/src/main/jniLibs/armeabi-v7a/libsimple.so")
+          if ! grep -q 'rootProject.file(storeFilePath)' app/build.gradle.kts; then
+            CONFLICT_FILES+=("app/build.gradle.kts")
           fi
 
-          if ! grep -q 'libsimple' app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt; then
+          if ! grep -q 'ensureMessageFtsTokenizer' app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt; then
             CONFLICT_FILES+=("app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt")
           fi
 
           if [ "${#CONFLICT_FILES[@]}" -gt 0 ]; then
             CONFLICT_FILES_JOINED="$(printf '%s\n' "${CONFLICT_FILES[@]}" | awk '!seen[$0]++' | paste -sd ',' -)"
             echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
-            echo "merge_conflict=true" >> "$GITHUB_OUTPUT"
+            echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
+            echo "overlay_conflict=true" >> "$GITHUB_OUTPUT"
             echo "branch_updated=false" >> "$GITHUB_OUTPUT"
             echo "conflict_files=$CONFLICT_FILES_JOINED" >> "$GITHUB_OUTPUT"
-            echo "ERROR: Fork overlay validation failed on top of upstream/master"
+            echo "ERROR: Fork overlay application failed after clean merge"
             exit 1
           fi
 
-          git add "${OVERLAY_PATHS[@]}"
+          git add \
+            app/build.gradle.kts \
+            app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt \
+            "${FORK_ONLY_PATHS[@]}"
+
+          chmod +x gradlew
+          ./gradlew assembleArmv7Debug --stacktrace
+
+          ARMV7_APK="$(find app/build/outputs/apk -type f -name '*armv7*debug*.apk' | head -1)"
+          if [ -z "$ARMV7_APK" ]; then
+            echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
+            echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
+            echo "overlay_conflict=true" >> "$GITHUB_OUTPUT"
+            echo "branch_updated=false" >> "$GITHUB_OUTPUT"
+            echo "conflict_files=app/build.gradle.kts,app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt" >> "$GITHUB_OUTPUT"
+            echo "ERROR: armv7 debug APK not found after overlay application"
+            exit 1
+          fi
+
+          if ! unzip -l "$ARMV7_APK" | grep -q 'lib/armeabi-v7a/libsimple.so'; then
+            echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
+            echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
+            echo "overlay_conflict=true" >> "$GITHUB_OUTPUT"
+            echo "branch_updated=false" >> "$GITHUB_OUTPUT"
+            echo "conflict_files=app/src/main/jniLibs/armeabi-v7a/libsimple.so" >> "$GITHUB_OUTPUT"
+            echo "ERROR: armv7 APK missing libsimple.so after overlay application"
+            exit 1
+          fi
 
           AFTER_TREE="$(git write-tree)"
-          if [ -n "$BEFORE_SHA" ] && [ "$AFTER_TREE" = "$(git rev-parse "${BEFORE_SHA}^{tree}")" ]; then
+          if [ "$AFTER_TREE" = "$(git rev-parse "${BEFORE_SHA}^{tree}")" ]; then
             BRANCH_UPDATED="false"
           else
             git commit -m "chore: sync upstream (${UPSTREAM_SHA:0:7})"
@@ -242,16 +295,19 @@ jobs:
 
           echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
           echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
+          echo "overlay_conflict=false" >> "$GITHUB_OUTPUT"
           echo "branch_updated=$BRANCH_UPDATED" >> "$GITHUB_OUTPUT"
           echo "conflict_files=" >> "$GITHUB_OUTPUT"
 
       - name: Create or update conflict issue
-        if: always() && steps.merge.outputs.merge_conflict == 'true'
+        if: always() && (steps.merge.outputs.merge_conflict == 'true' || steps.merge.outputs.overlay_conflict == 'true')
         uses: actions/github-script@v7
         env:
           LOCAL_SHA: ${{ steps.compare.outputs.local_sha }}
           UPSTREAM_SHA: ${{ steps.compare.outputs.upstream_sha }}
           CONFLICT_FILES: ${{ steps.merge.outputs.conflict_files }}
+          MERGE_CONFLICT: ${{ steps.merge.outputs.merge_conflict }}
+          OVERLAY_CONFLICT: ${{ steps.merge.outputs.overlay_conflict }}
         with:
           script: |
             const owner = context.repo.owner;
@@ -260,11 +316,19 @@ jobs:
             const issueTitle = "chore: upstream sync conflict";
             const localSha = process.env.LOCAL_SHA || "";
             const upstreamSha = process.env.UPSTREAM_SHA || "";
+            const mergeConflict = process.env.MERGE_CONFLICT === "true";
+            const overlayConflict = process.env.OVERLAY_CONFLICT === "true";
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
             const conflictFiles = (process.env.CONFLICT_FILES || "")
               .split(",")
               .map((item) => item.trim())
               .filter(Boolean);
+
+            const failureType = mergeConflict
+              ? "Git merge conflict"
+              : overlayConflict
+                ? "ARMv7 overlay/build validation failure"
+                : "Unknown";
 
             const filesBlock = conflictFiles.length
               ? conflictFiles.map((file) => `- \`${file}\``).join("\n")
@@ -275,6 +339,7 @@ jobs:
               "",
               `- Local master: \`${localSha}\``,
               `- Upstream master: \`${upstreamSha}\``,
+              `- Failure Type: ${failureType}`,
               `- Workflow run: ${runUrl}`,
               "",
               "### Conflict Files",
@@ -424,7 +489,8 @@ jobs:
 
           HAS_NEW_COMMITS="${{ steps.compare.outputs.has_new_commits }}"
           HAS_NEW_UPSTREAM_RELEASE="${{ steps.release_check.outputs.has_new_upstream_release }}"
-          OVERLAY_CONFLICT="${{ steps.merge.outputs.merge_conflict }}"
+          MERGE_CONFLICT="${{ steps.merge.outputs.merge_conflict }}"
+          OVERLAY_CONFLICT="${{ steps.merge.outputs.overlay_conflict }}"
           BRANCH_UPDATED="${{ steps.merge.outputs.branch_updated }}"
           SYNC_BRANCH="${{ steps.merge.outputs.sync_branch }}"
           UPSTREAM_TAG="${{ steps.upstream_release.outputs.tag }}"
@@ -435,8 +501,8 @@ jobs:
           FINAL_UPSTREAM_TAG=""
 
           if [ "$HAS_NEW_UPSTREAM_RELEASE" = "true" ]; then
-            if [ "$HAS_NEW_COMMITS" = "true" ] && [ "$OVERLAY_CONFLICT" = "true" ]; then
-              echo "ERROR: Overlay validation failed, stop automatic release."
+            if [ "$HAS_NEW_COMMITS" = "true" ] && { [ "$MERGE_CONFLICT" = "true" ] || [ "$OVERLAY_CONFLICT" = "true" ]; }; then
+              echo "ERROR: Sync validation failed, stop automatic release."
               exit 1
             fi
             SHOULD_TRIGGER_RELEASE="true"
@@ -448,8 +514,8 @@ jobs:
               SOURCE_REF="master"
             fi
           elif [ "$HAS_NEW_COMMITS" = "true" ]; then
-            if [ "$OVERLAY_CONFLICT" = "true" ]; then
-              echo "ERROR: Overlay validation failed, stop automatic prerelease."
+            if [ "$MERGE_CONFLICT" = "true" ] || [ "$OVERLAY_CONFLICT" = "true" ]; then
+              echo "ERROR: Sync validation failed, stop automatic prerelease."
               exit 1
             fi
             if [ "$BRANCH_UPDATED" = "true" ] && [ -n "$SYNC_BRANCH" ]; then
