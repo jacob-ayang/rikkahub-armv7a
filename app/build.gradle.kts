@@ -21,8 +21,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 36
-        versionCode = 152
-        versionName = "2.1.9"
+        versionCode = 150
+        versionName = "2.1.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -31,12 +31,32 @@ android {
         }
     }
 
+    flavorDimensions += "arch"
+
+    productFlavors {
+        create("universal") {
+            dimension = "arch"
+            ndk {
+                abiFilters.clear()
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
+        }
+        create("armv7") {
+            dimension = "arch"
+            ndk {
+                abiFilters.clear()
+                abiFilters += "armeabi-v7a"
+            }
+        }
+    }
+
     splits {
         abi {
             // AppBundle tasks usually contain "bundle" in their name
             //noinspection WrongGradleMethod
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
-            isEnable = !isBuildingBundle
+            val isArmv7Build = gradle.startParameter.taskNames.any { it.lowercase().contains("armv7") }
+            isEnable = !isBuildingBundle && !isArmv7Build
             reset()
             include("arm64-v8a", "x86_64")
             isUniversalApk = true
@@ -59,7 +79,7 @@ android {
                 if (storeFilePath != null && storePasswordValue != null &&
                     keyAliasValue != null && keyPasswordValue != null
                 ) {
-                    storeFile = file(storeFilePath)
+                    storeFile = rootProject.file(storeFilePath)
                     storePassword = storePasswordValue
                     keyAlias = keyAliasValue
                     keyPassword = keyPasswordValue
@@ -137,8 +157,8 @@ composeCompiler {
 }
 
 tasks.register("buildAll") {
-    dependsOn("assembleRelease", "bundleRelease")
-    description = "Build both APK and AAB"
+    dependsOn("assembleArmv7Release", "assembleUniversalRelease")
+    description = "Build ARMv7a and Universal APKs"
 }
 
 ksp {
@@ -213,15 +233,14 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
 
-    // ucrop
-    implementation(libs.ucrop)
+    // Vendor ucrop locally because JitPack intermittently fails to resolve on GitHub runners.
+    implementation(files("libs/ucrop-2.2.11-native.aar"))
 
     // pebble (template engine)
     implementation(libs.pebble)
 
     // coil
     implementation(libs.coil.compose)
-    implementation(libs.coil.gif)
     implementation(libs.coil.okhttp)
     implementation(libs.coil.svg)
 
