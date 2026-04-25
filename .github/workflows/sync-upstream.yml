@@ -26,6 +26,7 @@ jobs:
       branch_updated: ${{ steps.merge.outputs.branch_updated }}
       sync_branch: ${{ steps.merge.outputs.sync_branch }}
       upstream_tag_raw: ${{ steps.upstream_release.outputs.tag }}
+      sync_pr_url: ${{ steps.sync_pr.outputs.url }}
 
     steps:
       - name: Checkout master
@@ -427,57 +428,6 @@ jobs:
             core.setOutput("number", String(pr.number));
             core.setOutput("url", pr.html_url);
 
-      - name: Publish sync summary
-        if: always()
-        env:
-          HAS_NEW_COMMITS: ${{ steps.compare.outputs.has_new_commits }}
-          HAS_NEW_UPSTREAM_RELEASE: ${{ steps.release_check.outputs.has_new_upstream_release }}
-          MERGE_CONFLICT: ${{ steps.merge.outputs.merge_conflict }}
-          OVERLAY_CONFLICT: ${{ steps.merge.outputs.overlay_conflict }}
-          BRANCH_UPDATED: ${{ steps.merge.outputs.branch_updated }}
-          SYNC_BRANCH: ${{ steps.merge.outputs.sync_branch }}
-          UPSTREAM_TAG: ${{ steps.upstream_release.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          TRIGGER_RELEASE="false"
-          RELEASE_MODE=""
-          RELEASE_SOURCE_REF=""
-
-          if [ "$HAS_NEW_UPSTREAM_RELEASE" = "true" ]; then
-            if [ "$MERGE_CONFLICT" != "true" ] && [ "$OVERLAY_CONFLICT" != "true" ]; then
-              TRIGGER_RELEASE="true"
-              RELEASE_MODE="release"
-              if [ -n "$SYNC_BRANCH" ]; then
-                RELEASE_SOURCE_REF="$SYNC_BRANCH"
-              else
-                RELEASE_SOURCE_REF="master"
-              fi
-            fi
-          elif [ "$HAS_NEW_COMMITS" = "true" ]; then
-            if [ "$MERGE_CONFLICT" != "true" ] && [ "$OVERLAY_CONFLICT" != "true" ] && [ "$BRANCH_UPDATED" = "true" ] && [ -n "$SYNC_BRANCH" ]; then
-              TRIGGER_RELEASE="true"
-              RELEASE_MODE="prerelease"
-              RELEASE_SOURCE_REF="$SYNC_BRANCH"
-            fi
-          fi
-
-          {
-            echo "## Upstream Sync Summary"
-            echo ""
-            echo "| Item | Value |"
-            echo "|---|---|"
-            echo "| New Commits | \`$HAS_NEW_COMMITS\` |"
-            echo "| New Upstream Release | \`$HAS_NEW_UPSTREAM_RELEASE\` |"
-            echo "| Sync Branch | \`$SYNC_BRANCH\` |"
-            echo "| Conflict Files | \`${{ steps.merge.outputs.conflict_files }}\` |"
-            echo "| Sync PR | \`${{ steps.sync_pr.outputs.url }}\` |"
-            echo "| Trigger Release | \`$TRIGGER_RELEASE\` |"
-            echo "| Release Mode | \`$RELEASE_MODE\` |"
-            echo "| Release Source Ref | \`$RELEASE_SOURCE_REF\` |"
-            echo "| Upstream Tag | \`$UPSTREAM_TAG\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   release-gate:
     needs: sync
     if: always()
@@ -535,6 +485,29 @@ jobs:
           echo "release_mode=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
           echo "source_ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
           echo "upstream_tag=$FINAL_UPSTREAM_TAG" >> "$GITHUB_OUTPUT"
+
+  publish-summary:
+    needs: [sync, release-gate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish sync summary
+        run: |
+          {
+            echo "## Upstream Sync Summary"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| New Commits | \`${{ needs.sync.outputs.has_new_commits }}\` |"
+            echo "| New Upstream Release | \`${{ needs.sync.outputs.has_new_upstream_release }}\` |"
+            echo "| Sync Branch | \`${{ needs.sync.outputs.sync_branch }}\` |"
+            echo "| Conflict Files | \`${{ needs.sync.outputs.conflict_files }}\` |"
+            echo "| Sync PR | \`${{ needs.sync.outputs.sync_pr_url }}\` |"
+            echo "| Trigger Release | \`${{ needs.release-gate.outputs.should_trigger_release }}\` |"
+            echo "| Release Mode | \`${{ needs.release-gate.outputs.release_mode }}\` |"
+            echo "| Release Source Ref | \`${{ needs.release-gate.outputs.source_ref }}\` |"
+            echo "| Upstream Tag | \`${{ needs.release-gate.outputs.upstream_tag || needs.sync.outputs.upstream_tag_raw }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   trigger-release:
     needs: [sync, release-gate]
