@@ -264,10 +264,8 @@ jobs:
             BRANCH_UPDATED="true"
           fi
 
-          if [ "$BRANCH_UPDATED" = "true" ]; then
+          if [ -n "$SYNC_BRANCH" ]; then
             git push origin "$SYNC_BRANCH" --force-with-lease
-          elif [ -z "$EXISTING_BRANCH" ]; then
-            SYNC_BRANCH=""
           fi
 
           echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
@@ -378,7 +376,7 @@ jobs:
             }
 
       - name: Create or update sync PR
-        if: steps.compare.outputs.has_new_commits == 'true' && steps.merge.outputs.merge_conflict != 'true' && (steps.merge.outputs.branch_updated == 'true' || steps.find_pr.outputs.number != '')
+        if: steps.compare.outputs.has_new_commits == 'true' && steps.merge.outputs.merge_conflict != 'true' && steps.merge.outputs.overlay_conflict != 'true' && steps.merge.outputs.sync_branch != ''
         id: sync_pr
         uses: actions/github-script@v7
         env:
