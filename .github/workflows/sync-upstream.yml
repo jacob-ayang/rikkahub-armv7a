@@ -255,8 +255,7 @@ jobs:
             app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt \
             "${FORK_ONLY_PATHS[@]}"
 
-          AFTER_TREE="$(git write-tree)"
-          if [ "$AFTER_TREE" = "$(git rev-parse "${BEFORE_SHA}^{tree}")" ]; then
+          if git diff --cached --quiet; then
             BRANCH_UPDATED="false"
           else
             git commit -m "chore: sync upstream (${UPSTREAM_SHA:0:7})"
