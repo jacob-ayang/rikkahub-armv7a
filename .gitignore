@@ -13,3 +13,5 @@ local.properties
 .kotlin
 *.keystore
 *.jks
+node_modules/
+package-lock.json

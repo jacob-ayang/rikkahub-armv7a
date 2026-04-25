@@ -171,7 +171,7 @@ jobs:
             ".github/workflows/armv7-smoke-check.yml"
             "docs/native/libsimple.md"
             "app/src/main/jniLibs"
-            "libs/ucrop-2.2.11-native.aar"
+            "app/libs/ucrop-2.2.11-native.aar"
           )
 
           if [ -n "$EXISTING_BRANCH" ]; then
@@ -258,7 +258,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleArmv7Debug --stacktrace
 
-          ARMV7_APK="$(find app/build/outputs/apk -type f -name '*armv7*debug*.apk' | head -1)"
+          ARMV7_APK="$(find app/build/outputs/apk -type f \( -path '*/armv7/debug/*.apk' -o -path '*/armv7Debug/*.apk' -o -name '*armv7*debug*.apk' \) | sort | head -1)"
           if [ -z "$ARMV7_APK" ]; then
             echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
             echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
@@ -266,6 +266,7 @@ jobs:
             echo "branch_updated=false" >> "$GITHUB_OUTPUT"
             echo "conflict_files=app/build.gradle.kts,app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt" >> "$GITHUB_OUTPUT"
             echo "ERROR: armv7 debug APK not found after overlay application"
+            find app/build/outputs/apk -type f -name '*.apk' | sort || true
             exit 1
           fi
 
@@ -276,6 +277,8 @@ jobs:
             echo "branch_updated=false" >> "$GITHUB_OUTPUT"
             echo "conflict_files=app/src/main/jniLibs/armeabi-v7a/libsimple.so" >> "$GITHUB_OUTPUT"
             echo "ERROR: armv7 APK missing libsimple.so after overlay application"
+            echo "APK used for validation: $ARMV7_APK"
+            unzip -l "$ARMV7_APK" | grep 'lib/' || true
             exit 1
           fi
 
