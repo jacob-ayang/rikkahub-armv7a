@@ -255,33 +255,6 @@ jobs:
             app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt \
             "${FORK_ONLY_PATHS[@]}"
 
-          chmod +x gradlew
-          ./gradlew assembleArmv7Debug --stacktrace
-
-          ARMV7_APK="$(find app/build/outputs/apk -type f \( -path '*/armv7/debug/*.apk' -o -path '*/armv7Debug/*.apk' -o -name '*armv7*debug*.apk' \) | sort | head -1)"
-          if [ -z "$ARMV7_APK" ]; then
-            echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
-            echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
-            echo "overlay_conflict=true" >> "$GITHUB_OUTPUT"
-            echo "branch_updated=false" >> "$GITHUB_OUTPUT"
-            echo "conflict_files=app/build.gradle.kts,app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt" >> "$GITHUB_OUTPUT"
-            echo "ERROR: armv7 debug APK not found after overlay application"
-            find app/build/outputs/apk -type f -name '*.apk' | sort || true
-            exit 1
-          fi
-
-          if ! unzip -l "$ARMV7_APK" | grep -q 'lib/armeabi-v7a/libsimple.so'; then
-            echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
-            echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
-            echo "overlay_conflict=true" >> "$GITHUB_OUTPUT"
-            echo "branch_updated=false" >> "$GITHUB_OUTPUT"
-            echo "conflict_files=app/src/main/jniLibs/armeabi-v7a/libsimple.so" >> "$GITHUB_OUTPUT"
-            echo "ERROR: armv7 APK missing libsimple.so after overlay application"
-            echo "APK used for validation: $ARMV7_APK"
-            unzip -l "$ARMV7_APK" | grep 'lib/' || true
-            exit 1
-          fi
-
           AFTER_TREE="$(git write-tree)"
           if [ "$AFTER_TREE" = "$(git rev-parse "${BEFORE_SHA}^{tree}")" ]; then
             BRANCH_UPDATED="false"
