@@ -20,11 +20,12 @@ jobs:
     outputs:
       has_new_commits: ${{ steps.compare.outputs.has_new_commits }}
       has_new_upstream_release: ${{ steps.release_check.outputs.has_new_upstream_release }}
-      source_ref: ${{ steps.decide.outputs.source_ref }}
-      release_mode: ${{ steps.decide.outputs.release_mode }}
-      upstream_tag: ${{ steps.decide.outputs.upstream_tag }}
-      should_trigger_release: ${{ steps.decide.outputs.should_trigger_release }}
       conflict_files: ${{ steps.merge.outputs.conflict_files }}
+      merge_conflict: ${{ steps.merge.outputs.merge_conflict }}
+      overlay_conflict: ${{ steps.merge.outputs.overlay_conflict }}
+      branch_updated: ${{ steps.merge.outputs.branch_updated }}
+      sync_branch: ${{ steps.merge.outputs.sync_branch }}
+      upstream_tag_raw: ${{ steps.upstream_release.outputs.tag }}
 
     steps:
       - name: Checkout master
@@ -302,7 +303,7 @@ jobs:
             const failureType = mergeConflict
               ? "Git merge conflict"
               : overlayConflict
-                ? "ARMv7 overlay/build validation failure"
+                ? "ARMv7 overlay validation failure"
                 : "Unknown";
 
             const filesBlock = conflictFiles.length
@@ -347,26 +348,32 @@ jobs:
 
             const existing = openIssues.find((item) => !item.pull_request && item.title === issueTitle);
             if (existing) {
-              await github.rest.issues.update({
-                owner,
-                repo,
-                issue_number: existing.number,
-                body,
-              });
-              await github.rest.issues.addLabels({
-                owner,
-                repo,
-                issue_number: existing.number,
-                labels: [label],
-              });
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
             } else {
-              await github.rest.issues.create({
-                owner,
-                repo,
-                title: issueTitle,
-                body,
-                labels: [label],
-              });
+              await github.rest.issues.create({ owner, repo, title: issueTitle, body, labels: [label] });
+            }
+
+      - name: Close resolved conflict issue
+        if: always() && steps.merge.outputs.merge_conflict != 'true' && steps.merge.outputs.overlay_conflict != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const label = "upstream-sync";
+            const issueTitle = "chore: upstream sync conflict";
+
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              labels: label,
+              per_page: 100,
+            });
+
+            const existing = openIssues.find((item) => !item.pull_request && item.title === issueTitle);
+            if (existing) {
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: "closed" });
             }
 
       - name: Create or update sync PR
@@ -403,72 +410,64 @@ jobs:
 
             let pr = pulls.find((item) => item.head?.ref === branch);
             if (!pr) {
-              const created = await github.rest.pulls.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                base: "master",
-                head: branch,
-                title,
-                body,
-              });
+              const created = await github.rest.pulls.create({ owner: context.repo.owner, repo: context.repo.repo, base: "master", head: branch, title, body });
               pr = created.data;
             } else {
-              await github.rest.pulls.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number,
-                title,
-                body,
-              });
+              await github.rest.pulls.update({ owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number, title, body });
             }
 
             try {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: ["upstream-sync"],
-              });
+              await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, labels: ["upstream-sync"] });
             } catch (error) {
               if (error.status !== 404 && error.status !== 422) {
                 throw error;
               }
-              try {
-                await github.rest.repos.createLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  name: "upstream-sync",
-                  color: "0366d6",
-                  description: "Automated upstream synchronization PR",
-                });
-              } catch (createError) {
-                if (createError.status !== 422) {
-                  throw createError;
-                }
-              }
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: ["upstream-sync"],
-              });
             }
 
             core.setOutput("number", String(pr.number));
             core.setOutput("url", pr.html_url);
 
+      - name: Publish sync summary
+        if: always()
+        run: |
+          {
+            echo "## Upstream Sync Summary"
+            echo ""
+            echo "| Item | Value |"
+            echo "|---|---|"
+            echo "| New Commits | \`${{ steps.compare.outputs.has_new_commits }}\` |"
+            echo "| New Upstream Release | \`${{ steps.release_check.outputs.has_new_upstream_release }}\` |"
+            echo "| Sync Branch | \`${{ steps.merge.outputs.sync_branch }}\` |"
+            echo "| Conflict Files | \`${{ steps.merge.outputs.conflict_files }}\` |"
+            echo "| Sync PR | \`${{ steps.sync_pr.outputs.url }}\` |"
+            echo "| Trigger Release | \`pending release-gate\` |"
+            echo "| Release Mode | \`pending release-gate\` |"
+            echo "| Release Source Ref | \`pending release-gate\` |"
+            echo "| Upstream Tag | \`${{ steps.upstream_release.outputs.tag }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release-gate:
+    needs: sync
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      should_trigger_release: ${{ steps.decide.outputs.should_trigger_release }}
+      release_mode: ${{ steps.decide.outputs.release_mode }}
+      source_ref: ${{ steps.decide.outputs.source_ref }}
+      upstream_tag: ${{ steps.decide.outputs.upstream_tag }}
+    steps:
       - name: Decide whether to trigger release workflow
         id: decide
         run: |
           set -euo pipefail
 
-          HAS_NEW_COMMITS="${{ steps.compare.outputs.has_new_commits }}"
-          HAS_NEW_UPSTREAM_RELEASE="${{ steps.release_check.outputs.has_new_upstream_release }}"
-          MERGE_CONFLICT="${{ steps.merge.outputs.merge_conflict }}"
-          OVERLAY_CONFLICT="${{ steps.merge.outputs.overlay_conflict }}"
-          BRANCH_UPDATED="${{ steps.merge.outputs.branch_updated }}"
-          SYNC_BRANCH="${{ steps.merge.outputs.sync_branch }}"
-          UPSTREAM_TAG="${{ steps.upstream_release.outputs.tag }}"
+          HAS_NEW_COMMITS="${{ needs.sync.outputs.has_new_commits }}"
+          HAS_NEW_UPSTREAM_RELEASE="${{ needs.sync.outputs.has_new_upstream_release }}"
+          MERGE_CONFLICT="${{ needs.sync.outputs.merge_conflict }}"
+          OVERLAY_CONFLICT="${{ needs.sync.outputs.overlay_conflict }}"
+          BRANCH_UPDATED="${{ needs.sync.outputs.branch_updated }}"
+          SYNC_BRANCH="${{ needs.sync.outputs.sync_branch }}"
+          UPSTREAM_TAG="${{ needs.sync.outputs.upstream_tag_raw }}"
 
           SHOULD_TRIGGER_RELEASE="false"
           RELEASE_MODE=""
@@ -505,33 +504,14 @@ jobs:
           echo "source_ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
           echo "upstream_tag=$FINAL_UPSTREAM_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Publish sync summary
-        if: always()
-        run: |
-          {
-            echo "## Upstream Sync Summary"
-            echo ""
-            echo "| Item | Value |"
-            echo "|---|---|"
-            echo "| New Commits | \`${{ steps.compare.outputs.has_new_commits }}\` |"
-            echo "| New Upstream Release | \`${{ steps.release_check.outputs.has_new_upstream_release }}\` |"
-            echo "| Sync Branch | \`${{ steps.merge.outputs.sync_branch }}\` |"
-            echo "| Conflict Files | \`${{ steps.merge.outputs.conflict_files }}\` |"
-            echo "| Sync PR | \`${{ steps.sync_pr.outputs.url }}\` |"
-            echo "| Trigger Release | \`${{ steps.decide.outputs.should_trigger_release }}\` |"
-            echo "| Release Mode | \`${{ steps.decide.outputs.release_mode }}\` |"
-            echo "| Release Source Ref | \`${{ steps.decide.outputs.source_ref }}\` |"
-            echo "| Upstream Tag | \`${{ steps.decide.outputs.upstream_tag }}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
   trigger-release:
-    needs: sync
-    if: needs.sync.outputs.should_trigger_release == 'true'
+    needs: [sync, release-gate]
+    if: needs.release-gate.outputs.should_trigger_release == 'true'
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
     with:
-      source_ref: ${{ needs.sync.outputs.source_ref }}
-      release_mode: ${{ needs.sync.outputs.release_mode }}
-      upstream_tag: ${{ needs.sync.outputs.upstream_tag }}
+      source_ref: ${{ needs.release-gate.outputs.source_ref }}
+      release_mode: ${{ needs.release-gate.outputs.release_mode }}
+      upstream_tag: ${{ needs.release-gate.outputs.upstream_tag }}
     secrets: inherit
