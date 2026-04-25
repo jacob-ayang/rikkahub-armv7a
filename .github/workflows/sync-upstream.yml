@@ -429,21 +429,53 @@ jobs:
 
       - name: Publish sync summary
         if: always()
+        env:
+          HAS_NEW_COMMITS: ${{ steps.compare.outputs.has_new_commits }}
+          HAS_NEW_UPSTREAM_RELEASE: ${{ steps.release_check.outputs.has_new_upstream_release }}
+          MERGE_CONFLICT: ${{ steps.merge.outputs.merge_conflict }}
+          OVERLAY_CONFLICT: ${{ steps.merge.outputs.overlay_conflict }}
+          BRANCH_UPDATED: ${{ steps.merge.outputs.branch_updated }}
+          SYNC_BRANCH: ${{ steps.merge.outputs.sync_branch }}
+          UPSTREAM_TAG: ${{ steps.upstream_release.outputs.tag }}
         run: |
+          set -euo pipefail
+
+          TRIGGER_RELEASE="false"
+          RELEASE_MODE=""
+          RELEASE_SOURCE_REF=""
+
+          if [ "$HAS_NEW_UPSTREAM_RELEASE" = "true" ]; then
+            if [ "$MERGE_CONFLICT" != "true" ] && [ "$OVERLAY_CONFLICT" != "true" ]; then
+              TRIGGER_RELEASE="true"
+              RELEASE_MODE="release"
+              if [ -n "$SYNC_BRANCH" ]; then
+                RELEASE_SOURCE_REF="$SYNC_BRANCH"
+              else
+                RELEASE_SOURCE_REF="master"
+              fi
+            fi
+          elif [ "$HAS_NEW_COMMITS" = "true" ]; then
+            if [ "$MERGE_CONFLICT" != "true" ] && [ "$OVERLAY_CONFLICT" != "true" ] && [ "$BRANCH_UPDATED" = "true" ] && [ -n "$SYNC_BRANCH" ]; then
+              TRIGGER_RELEASE="true"
+              RELEASE_MODE="prerelease"
+              RELEASE_SOURCE_REF="$SYNC_BRANCH"
+            fi
+          fi
+
           {
             echo "## Upstream Sync Summary"
             echo ""
             echo "| Item | Value |"
             echo "|---|---|"
-            echo "| New Commits | \`${{ steps.compare.outputs.has_new_commits }}\` |"
-            echo "| New Upstream Release | \`${{ steps.release_check.outputs.has_new_upstream_release }}\` |"
-            echo "| Sync Branch | \`${{ steps.merge.outputs.sync_branch }}\` |"
+            echo "| New Commits | \`$HAS_NEW_COMMITS\` |"
+            echo "| New Upstream Release | \`$HAS_NEW_UPSTREAM_RELEASE\` |"
+            echo "| Sync Branch | \`$SYNC_BRANCH\` |"
             echo "| Conflict Files | \`${{ steps.merge.outputs.conflict_files }}\` |"
             echo "| Sync PR | \`${{ steps.sync_pr.outputs.url }}\` |"
-            echo "| Trigger Release | \`pending release-gate\` |"
-            echo "| Release Mode | \`pending release-gate\` |"
-            echo "| Release Source Ref | \`pending release-gate\` |"
-            echo "| Upstream Tag | \`${{ steps.upstream_release.outputs.tag }}\` |"
+            echo "| Trigger Release | \`$TRIGGER_RELEASE\` |"
+            echo "| Release Mode | \`$RELEASE_MODE\` |"
+            echo "| Release Source Ref | \`$RELEASE_SOURCE_REF\` |"
+            echo "| Upstream Tag | \`$UPSTREAM_TAG\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   release-gate:
