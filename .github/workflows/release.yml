@@ -229,8 +229,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          ARMV7_APK="$(find app/build/outputs/apk -type f -name '*armv7*release*.apk' | head -1)"
-          UNIVERSAL_APK="$(find app/build/outputs/apk -type f -name '*-universal-release*.apk' | head -1)"
+          ARMV7_APK="$(find app/build/outputs/apk -type f \( -path '*/armv7/release/*.apk' -o -path '*/armv7Release/*.apk' -o -name '*armv7*release*.apk' \) | sort | head -1)"
+          UNIVERSAL_APK="$(find app/build/outputs/apk -type f \( -path '*/universal/release/*.apk' -o -path '*/universalRelease/*.apk' -o -name '*-universal-release*.apk' \) | sort | head -1)"
 
           if [ -z "$ARMV7_APK" ] || [ -z "$UNIVERSAL_APK" ]; then
             echo "ERROR: Expected armv7a and universal APK outputs were not found."
@@ -257,7 +257,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          ARMV7_APK="$(find app/build/outputs/apk -type f -name '*armv7*release*.apk' | head -1)"
+          ARMV7_APK="$(find app/build/outputs/apk -type f \( -path '*/armv7/release/*.apk' -o -path '*/armv7Release/*.apk' -o -name '*armv7*release*.apk' \) | sort | head -1)"
           if [ -z "$ARMV7_APK" ]; then
             echo "ERROR: armv7 APK not found for native library check."
             exit 1

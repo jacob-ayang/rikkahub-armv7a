@@ -110,7 +110,7 @@ jobs:
           set -euo pipefail
           mkdir -p build-output
 
-          ARMV7_APK="$(find app/build/outputs/apk -type f -name '*armv7*debug*.apk' | head -1)"
+          ARMV7_APK="$(find app/build/outputs/apk -type f \( -path '*/armv7/debug/*.apk' -o -path '*/armv7Debug/*.apk' -o -name '*armv7*debug*.apk' \) | sort | head -1)"
           if [ -z "$ARMV7_APK" ]; then
             echo "ERROR: armv7 debug APK not found."
             find app/build/outputs/apk -type f -name '*.apk' || true
