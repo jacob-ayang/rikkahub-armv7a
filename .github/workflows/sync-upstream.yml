@@ -513,6 +513,7 @@ jobs:
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
+      pull-requests: read
     with:
       source_ref: ${{ needs.release-gate.outputs.source_ref }}
       release_mode: ${{ needs.release-gate.outputs.release_mode }}
