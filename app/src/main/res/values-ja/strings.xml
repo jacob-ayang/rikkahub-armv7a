@@ -980,4 +980,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="reasoning_picker_hint">すべてのモデルが深さ調整に対応しているわけではありません。モデルおよびプロバイダーのドキュメントを参照してください。</string>
   <string name="setting_page_built_in_tools_image_generation">画像生成</string>
   <string name="setting_page_built_in_tools_image_generation_desc">画像生成機能を有効にする</string>
+  <string name="setting_provider_page_claude_prompt_cache_ttl_1h">1時間</string>
+  <string name="setting_provider_page_claude_prompt_cache_ttl_5m">5分</string>
+  <string name="setting_provider_page_claude_prompt_cache_ttl">プロンプトキャッシュ TTL</string>
+  <string name="assistant_page_temperature_warning">通常は 1 です。推論モデルでは変更を推奨しません。</string>
+  <string name="chat_page_check_title_model_settings">タイトルモデル設定を確認</string>
 </resources>
+
