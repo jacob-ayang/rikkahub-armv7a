@@ -98,6 +98,7 @@
   <string name="assistant_page_memory_desc">When memory is enabled, the model will try to actively record your information during conversations and use it in subsequent conversations. This feature requires the model to support tool calls to work properly</string>
   <string name="assistant_page_message_template">Message Content Template</string>
   <string name="assistant_page_message_template_desc">Controls the content format of chat messages before being sent to the LLM, usually no need to modify</string>
+  <string name="assistant_page_message_template_missing_message">Template does not contain {{ message }}, user messages will not be sent</string>
   <string name="assistant_page_name">Assistant Name</string>
   <string name="assistant_page_preset_messages">Preset Chat Messages</string>
   <string name="assistant_page_preset_messages_desc">Set initial conversation messages</string>
@@ -334,6 +335,7 @@
   <string name="export_title">Export</string>
   <string name="export_to_file">Export to file</string>
   <string name="export_to_file_desc">Save as JSON file</string>
+  <string name="extension_content_manage">Manage</string>
   <string name="extension_content_unnamed">Unnamed</string>
   <string name="extension_content_unnamed_lorebook">Unnamed Lorebook</string>
   <string name="extension_selector_go_to_extensions">Manage Extensions</string>
@@ -439,6 +441,8 @@
   <string name="permission_go_to_settings">Go to Setting</string>
   <string name="permission_local_network">Local Network</string>
   <string name="permission_local_network_desc">Allow the web server to be accessed from devices on the same local network</string>
+  <string name="permission_microphone">Microphone</string>
+  <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
   <string name="permission_permanently_denied">Permanently Denied</string>
@@ -744,8 +748,8 @@
   <string name="setting_page_sponsor_alert_dismiss">Not Now</string>
   <string name="setting_page_sponsor_alert_title">Support the Developer</string>
   <string name="setting_page_theme_setting">Theme Settings</string>
-  <string name="setting_page_tts_service">Text-to-Speech Service</string>
-  <string name="setting_page_tts_service_desc">Configure text-to-speech service providers</string>
+  <string name="setting_page_tts_service">Speech Services</string>
+  <string name="setting_page_tts_service_desc">Configure text-to-speech and speech recognition providers</string>
   <string name="setting_page_tts_settings">TTS Settings</string>
   <string name="setting_page_web_server">Web Server</string>
   <string name="setting_page_web_server_address_note">Address Notes</string>
@@ -881,6 +885,8 @@
   <string name="setting_tts_page_voice_name">Voice Name</string>
   <string name="setting_tts_page_voice_name_description">Name of the voice</string>
   <string name="setting_tts_page_voice_name_placeholder">Kore</string>
+  <string name="speech_tab_tts">Text to Speech</string>
+  <string name="speech_tab_asr">Speech Recognition</string>
   <string name="settings">Settings</string>
   <string name="share">Share</string>
   <string name="share_handler_page_title">Select an Assistant</string>
@@ -983,5 +989,39 @@
   <string name="setting_provider_page_claude_prompt_cache_ttl_5m">5 minutes</string>
   <string name="assistant_page_temperature_warning">Usually 1. Not recommended to change for reasoning models.</string>
   <string name="chat_page_check_title_model_settings">Check title model settings</string>
+  <string name="asr_button_content_description">Speech Recognition</string>
+  <string name="asr_button_stop">Stop</string>
+  <string name="speech_page_title">Speech</string>
+  <string name="setting_asr_page_edit_provider">Edit ASR Provider</string>
+  <string name="setting_asr_page_add_provider">Add ASR Provider</string>
+  <string name="setting_asr_page_default_name">ASR</string>
+  <string name="setting_asr_configure_provider_type">Provider Type</string>
+  <string name="setting_asr_configure_provider_type_desc">Realtime speech recognition provider</string>
+  <string name="setting_asr_configure_name">Name</string>
+  <string name="setting_asr_configure_name_desc">Custom name for this ASR provider</string>
+  <string name="setting_asr_configure_api_key">API Key</string>
+  <string name="setting_asr_configure_websocket_url">WebSocket URL</string>
+  <string name="setting_asr_configure_model">Model</string>
+  <string name="setting_asr_configure_model_desc">Realtime transcription model</string>
+  <string name="setting_asr_configure_language">Language</string>
+  <string name="setting_asr_configure_language_iso_desc">Optional ISO language code, such as zh or en</string>
+  <string name="setting_asr_configure_language_code_desc">Optional language code, e.g. zh-CN, en-US, ja-JP</string>
+  <string name="setting_asr_configure_prompt">Prompt</string>
+  <string name="setting_asr_configure_prompt_desc">Optional hint for names, terms, or formatting</string>
+  <string name="setting_asr_configure_vad_threshold">VAD Threshold</string>
+  <string name="setting_asr_configure_vad_desc">Server VAD sensitivity, usually 0.3 - 0.8</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">Server VAD sensitivity, set 0 to disable VAD</string>
+  <string name="setting_asr_configure_prefix_padding">Prefix Padding</string>
+  <string name="setting_asr_configure_prefix_padding_desc">Audio kept before detected speech, in milliseconds</string>
+  <string name="setting_asr_configure_silence_duration">Silence Duration</string>
+  <string name="setting_asr_configure_silence_duration_desc">Silence duration that ends a turn, in milliseconds</string>
+  <string name="setting_asr_configure_openai_api_key_desc">OpenAI API key used by the realtime websocket</string>
+  <string name="setting_asr_configure_openai_websocket_desc">OpenAI realtime websocket endpoint</string>
+  <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API key</string>
+  <string name="setting_asr_configure_dashscope_websocket_desc">DashScope realtime websocket endpoint</string>
+  <string name="setting_asr_configure_volcengine_api_key_desc">Volcengine API key (X-Api-Key)</string>
+  <string name="setting_asr_configure_volcengine_websocket_desc">Volcengine streaming ASR endpoint</string>
+  <string name="setting_asr_configure_resource_id">Resource ID</string>
+  <string name="setting_asr_configure_resource_id_desc">X-Api-Resource-Id for billing</string>
 </resources>
 
