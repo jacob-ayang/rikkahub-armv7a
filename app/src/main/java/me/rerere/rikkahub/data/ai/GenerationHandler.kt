@@ -76,6 +76,7 @@ class GenerationHandler(
         tools: List<Tool> = emptyList(),
         maxSteps: Int = 256,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        conversationSystemPrompt: String? = null,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -150,6 +151,7 @@ class GenerationHandler(
                     memories = memories ?: emptyList(),
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
+                    conversationSystemPrompt = conversationSystemPrompt,
                 )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
@@ -266,7 +268,11 @@ class GenerationHandler(
                         runCatching {
                             val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                                 ?: error("Tool ${tool.toolName} not found")
-                            val args = json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                            val args = runCatching {
+                                json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                            }.getOrElse {
+                                error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
+                            }
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
                             val result = toolDef.execute(args)
                             executedTools += tool.copy(output = result)
@@ -335,12 +341,18 @@ class GenerationHandler(
         memories: List<AssistantMemory>,
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+        conversationSystemPrompt: String? = null,
     ) {
         val internalMessages = buildList {
             val system = buildString {
-                // 如果助手有系统提示，则添加到消息中
-                if (assistant.systemPrompt.isNotBlank()) {
-                    append(assistant.systemPrompt)
+                val effectiveSystemPrompt =
+                    if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
+                        conversationSystemPrompt
+                    } else {
+                        assistant.systemPrompt
+                    }
+                if (effectiveSystemPrompt.isNotBlank()) {
+                    append(effectiveSystemPrompt)
                 }
 
                 // 记忆
