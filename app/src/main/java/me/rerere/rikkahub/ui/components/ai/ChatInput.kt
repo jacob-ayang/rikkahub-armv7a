@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.content.MediaType
@@ -135,6 +136,7 @@ fun ChatInput(
     modifier: Modifier = Modifier,
     onUpdateChatModel: (Model) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
+    onUpdateConversation: (Conversation) -> Unit,
     onUpdateSearchService: (Int) -> Unit,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onCancelClick: () -> Unit,
@@ -413,7 +415,7 @@ fun ChatInput(
     }
 
     Surface(
-        color = Color.Transparent,
+        color = if (assistant.background != null) Color.Transparent else MaterialTheme.colorScheme.background,
     ) {
         Column(
             modifier = modifier
@@ -435,6 +437,7 @@ fun ChatInput(
                     ),
                 shape = MaterialTheme.shapes.largeIncreased,
                 tonalElevation = 0.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
             ) {
                 Column(
@@ -640,6 +643,7 @@ fun ChatInput(
                             mcpManager = mcpManager,
                             onCompressContext = onCompressContext,
                             onUpdateAssistant = onUpdateAssistant,
+                            onUpdateConversation = onUpdateConversation,
                             showInjectionSheet = showInjectionSheet,
                             onShowInjectionSheetChange = { showInjectionSheet = it },
                             showCompressDialog = showCompressDialog,
@@ -778,8 +782,8 @@ private fun TextInputRow(
             colors = TextFieldDefaults.colors().copy(
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
             ),
             trailingIcon = {
                 if (isFocused) {

@@ -44,6 +44,8 @@
   <string name="assistant_page_add_header">ヘッダーを追加</string>
   <string name="assistant_page_allow_conversation_system_prompt">会話別システムプロンプト</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">会話ごとにシステムプロンプトを個別に設定可能にする</string>
+  <string name="assistant_page_allow_conversation_prompt_injection">会話別プロンプトインジェクション</string>
+  <string name="assistant_page_allow_conversation_prompt_injection_desc">会話ごとにプロンプトインジェクションとロアブックを個別にバインド可能にする</string>
   <string name="assistant_page_available_variables">"利用可能な変数: "</string>
   <string name="assistant_page_background_opacity">背景の透明度</string>
   <string name="assistant_page_background_opacity_desc">チャット背景画像の表示透明度を調整します</string>
@@ -785,7 +787,7 @@
   <string name="setting_page_donate">寄付</string>
   <string name="setting_page_donate_desc">このアプリを気に入った場合は、作者の作品をスポンサーしてください</string>
   <string name="setting_page_dynamic_color">ダイナミックカラー</string>
-  <string name="setting_page_dynamic_color_desc">ダイナミックカラーを使用するかどうか</string>
+  <string name="setting_page_dynamic_color_desc">壁紙に基づいてアプリのテーマ配色を動的に生成するかどうか</string>
   <string name="setting_page_extensions">拡張機能</string>
   <string name="setting_page_extensions_desc">プロンプトインジェクション、スキルなどを管理</string>
   <string name="setting_page_general_settings">一般設定</string>
@@ -817,7 +819,21 @@
   <string name="setting_page_sponsor_alert_desc">アプリを100回以上起動しました！気に入っていただけたら、開発者をサポートしていただけると嬉しいです。</string>
   <string name="setting_page_sponsor_alert_dismiss">今はしない</string>
   <string name="setting_page_sponsor_alert_title">開発者を支援する</string>
-  <string name="setting_page_theme_setting">テーマ設定</string>
+  <string name="setting_page_theme_setting">テーマ</string>
+  <string name="setting_page_theme_setting_desc">アプリの配色をカスタマイズ</string>
+  <string name="setting_theme_page_preset_themes">プリセットテーマ</string>
+  <string name="setting_theme_page_custom_themes">カスタムテーマ</string>
+  <string name="setting_theme_page_add_theme">新規</string>
+  <string name="setting_theme_page_no_custom_themes">カスタムテーマはまだありません</string>
+  <string name="setting_theme_page_create_theme">テーマを作成</string>
+  <string name="setting_theme_page_edit_theme">テーマを編集</string>
+  <string name="setting_theme_page_theme_name">テーマ名</string>
+  <string name="setting_theme_page_primary_color">プライマリカラー</string>
+  <string name="setting_theme_page_secondary_color">セカンダリカラー</string>
+  <string name="setting_theme_page_tertiary_color">ターシャリカラー</string>
+  <string name="setting_theme_page_preview">プレビュー</string>
+  <string name="setting_theme_page_save">保存</string>
+  <string name="setting_theme_page_dynamic_color_hint">ダイナミックカラーが有効です。カスタムテーマを使用するには、表示設定で無効にしてください。</string>
   <string name="setting_page_tts_service">音声サービス</string>
   <string name="setting_page_tts_service_desc">音声合成と音声認識のプロバイダーを設定</string>
   <string name="setting_page_tts_settings">TTS設定</string>
@@ -1057,4 +1073,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="video">動画</string>
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
+  <string name="setting_theme_page_import_theme">インポート</string>
+  <string name="setting_theme_page_export_success">テーマJSONがクリップボードにコピーされました</string>
+  <string name="setting_theme_page_import_success">テーマが正常にインポートされました</string>
+  <string name="setting_theme_page_delete_theme_title">テーマを削除</string>
+  <string name="setting_theme_page_delete_theme_message">このテーマを削除してもよろしいですか？</string>
 </resources>
+
