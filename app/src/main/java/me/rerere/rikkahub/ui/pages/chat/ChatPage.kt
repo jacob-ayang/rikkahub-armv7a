@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -144,18 +145,15 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
-    LaunchedEffect(vm) {
-        if (nodeId == null && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
-            chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
-            vm.chatListInitialized = true
-        }
-    }
-
     LaunchedEffect(nodeId, conversation.messageNodes.size) {
-        if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
-            val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
-            if (index >= 0) {
-                chatListState.scrollToItem(index)
+        if (!vm.chatListInitialized && conversation.messageNodes.isNotEmpty()) {
+            if (nodeId != null) {
+                val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
+                if (index >= 0) {
+                    chatListState.scrollToItem(index)
+                }
+            } else {
+                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
             }
             vm.chatListInitialized = true
         }
@@ -259,7 +257,7 @@ private fun ChatPageContent(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
-        AssistantBackground(setting = setting)
+        AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         Scaffold(
             topBar = {
                 TopBar(
@@ -341,6 +339,10 @@ private fun ChatPageContent(
                                 }
                             )
                         )
+                    },
+                    onUpdateConversation = {
+                        vm.updateConversation(it)
+                        vm.saveConversationAsync()
                     },
                     onUpdateSearchService = { index ->
                         vm.updateSettings(
@@ -425,6 +427,10 @@ private fun ChatPageContent(
                 },
                 onToggleFavorite = { node ->
                     vm.toggleMessageFavorite(node)
+                },
+                onConversationSystemPromptChange = { newPrompt ->
+                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
+                    vm.saveConversationAsync()
                 },
             )
         }

@@ -149,6 +149,12 @@ object ModelRegistry {
         reasoningAbility()
     }
 
+    val GEMINI_3_5 = defineModel {
+        tokens("gemini", "3", "5")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     val GEMINI_FLASH_LATEST = defineModel {
         exact("gemini-flash-latest")
         visionInput()
@@ -166,7 +172,7 @@ object ModelRegistry {
     }
 
     val GEMINI_3_SERIES = defineGroup {
-        add(GEMINI_3_PRO, GEMINI_3_FLASH, GEMINI_3_1_PRO_PREVIEW, GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS)
+        add(GEMINI_3_PRO, GEMINI_3_FLASH, GEMINI_3_1_PRO_PREVIEW, GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS, GEMINI_3_5)
     }
 
     val GEMINI_SERIES = defineGroup {
@@ -280,6 +286,12 @@ object ModelRegistry {
 
     private val QWEN_3_6 = defineModel {
         tokens("qwen", "3", "6")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val QWEN_3_7 = defineModel {
+        tokens("qwen", "3", "7")
         visionInput()
         toolReasoningAbility()
     }
@@ -420,6 +432,7 @@ object ModelRegistry {
         GEMINI_3_1_PRO_PREVIEW,
         GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS,
         GEMINI_3_1_FLASH_IMAGE,
+        GEMINI_3_5,
         GEMINI_FLASH_LATEST,
         GEMINI_PRO_LATEST,
         CLAUDE_SONNET_3_5,
@@ -440,6 +453,7 @@ object ModelRegistry {
         QWEN_3,
         QWEN_3_5,
         QWEN_3_6,
+        QWEN_3_7,
         DOUBAO_1_6,
         DOUBAO_1_8,
         GROK_4,

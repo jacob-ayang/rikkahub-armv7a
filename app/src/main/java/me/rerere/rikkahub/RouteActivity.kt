@@ -64,6 +64,7 @@ import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.ui.activity.SafeModeActivity
 import me.rerere.rikkahub.ui.components.ui.TTSController
+import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
@@ -72,6 +73,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
+import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
 import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
 import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
@@ -98,6 +100,7 @@ import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingDisplayPage
+import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
@@ -105,8 +108,9 @@ import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
+import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
-import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
+import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
@@ -222,6 +226,7 @@ class RouteActivity : ComponentActivity() {
         val toastState = rememberToasterState()
         val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
         val tts = rememberCustomTtsState()
+        val asr = rememberCustomAsrState()
         val eventBus = koinInject<AppEventBus>()
         LaunchedEffect(tts) {
             eventBus.events.collect { event ->
@@ -256,6 +261,7 @@ class RouteActivity : ComponentActivity() {
                 LocalHighlighter provides highlighter,
                 LocalToaster provides toastState,
                 LocalTTSState provides tts,
+                LocalASRState provides asr,
             ) {
                 Toaster(
                     state = toastState,
@@ -377,6 +383,10 @@ class RouteActivity : ComponentActivity() {
                                 WebViewPage(key.url, key.content)
                             }
 
+                            entry<Screen.SettingTheme> {
+                                SettingThemePage()
+                            }
+
                             entry<Screen.SettingDisplay> {
                                 SettingDisplayPage()
                             }
@@ -402,8 +412,13 @@ class RouteActivity : ComponentActivity() {
                                 SettingSearchPage()
                             }
 
-                            entry<Screen.SettingTTS> {
-                                SettingTTSPage()
+                            entry<Screen.SettingSearchDetail> { key ->
+                                val id = Uuid.parse(key.serviceId)
+                                SettingSearchDetailPage(id)
+                            }
+
+                            entry<Screen.SettingSpeech> {
+                                SettingSpeechPage()
                             }
 
                             entry<Screen.SettingMcp> {
@@ -572,6 +587,9 @@ sealed interface Screen : NavKey {
     data class WebView(val url: String = "", val content: String = "") : Screen
 
     @Serializable
+    data object SettingTheme : Screen
+
+    @Serializable
     data object SettingDisplay : Screen
 
     @Serializable
@@ -590,7 +608,10 @@ sealed interface Screen : NavKey {
     data object SettingSearch : Screen
 
     @Serializable
-    data object SettingTTS : Screen
+    data class SettingSearchDetail(val serviceId: String) : Screen
+
+    @Serializable
+    data object SettingSpeech : Screen
 
     @Serializable
     data object SettingMcp : Screen

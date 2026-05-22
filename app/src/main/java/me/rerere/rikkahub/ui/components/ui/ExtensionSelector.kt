@@ -28,6 +28,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
@@ -42,6 +43,8 @@ fun ExtensionSelector(
     assistant: Assistant,
     settings: Settings,
     onUpdate: (Assistant) -> Unit,
+    conversation: Conversation? = null,
+    onUpdateConversation: ((Conversation) -> Unit)? = null,
     onNavigateToQuickMessages: () -> Unit = {},
     onNavigateToPrompts: () -> Unit = {},
     onNavigateToSkills: () -> Unit = {},
@@ -53,6 +56,19 @@ fun ExtensionSelector(
         withContext(Dispatchers.IO) {
             skills = skillManager.listSkills()
         }
+    }
+
+    val useConversationInjections =
+        assistant.allowConversationPromptInjection && conversation != null && onUpdateConversation != null
+    val selectedModeInjectionIds = if (useConversationInjections) {
+        conversation.modeInjectionIds
+    } else {
+        assistant.modeInjectionIds
+    }
+    val selectedLorebookIds = if (useConversationInjections) {
+        conversation.lorebookIds
+    } else {
+        assistant.lorebookIds
     }
 
     val pagerState = rememberPagerState { 4 }
@@ -117,6 +133,7 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(quickMessageIds = newIds))
                             },
+                            onManage = onNavigateToQuickMessages,
                         )
                     } else {
                         ExtensionEmptyState(
@@ -131,19 +148,26 @@ fun ExtensionSelector(
                     if (settings.modeInjections.isNotEmpty()) {
                         ModeInjectionsContent(
                             modeInjections = settings.modeInjections,
-                            selectedIds = assistant.modeInjectionIds,
+                            selectedIds = selectedModeInjectionIds,
                             onToggle = { id, checked ->
                                 val newIds = if (checked) {
-                                    assistant.modeInjectionIds + id
+                                    selectedModeInjectionIds + id
                                 } else {
-                                    assistant.modeInjectionIds - id
+                                    selectedModeInjectionIds - id
                                 }
-                                onUpdate(assistant.copy(modeInjectionIds = newIds))
+                                if (useConversationInjections) {
+                                    onUpdateConversation(conversation.copy(modeInjectionIds = newIds))
+                                } else {
+                                    onUpdate(assistant.copy(modeInjectionIds = newIds))
+                                }
                             },
+                            onManage = onNavigateToPrompts,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_mode_injections_empty)
+                            message = stringResource(R.string.extension_selector_mode_injections_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToPrompts,
                         )
                     }
                 }
@@ -152,19 +176,26 @@ fun ExtensionSelector(
                     if (settings.lorebooks.isNotEmpty()) {
                         LorebooksContent(
                             lorebooks = settings.lorebooks,
-                            selectedIds = assistant.lorebookIds,
+                            selectedIds = selectedLorebookIds,
                             onToggle = { id, checked ->
                                 val newIds = if (checked) {
-                                    assistant.lorebookIds + id
+                                    selectedLorebookIds + id
                                 } else {
-                                    assistant.lorebookIds - id
+                                    selectedLorebookIds - id
                                 }
-                                onUpdate(assistant.copy(lorebookIds = newIds))
+                                if (useConversationInjections) {
+                                    onUpdateConversation(conversation.copy(lorebookIds = newIds))
+                                } else {
+                                    onUpdate(assistant.copy(lorebookIds = newIds))
+                                }
                             },
+                            onManage = onNavigateToPrompts,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_lorebooks_empty)
+                            message = stringResource(R.string.extension_selector_lorebooks_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToPrompts,
                         )
                     }
                 }
@@ -182,6 +213,7 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(enabledSkills = newSkills))
                             },
+                            onManage = onNavigateToSkills,
                         )
                     } else {
                         ExtensionEmptyState(

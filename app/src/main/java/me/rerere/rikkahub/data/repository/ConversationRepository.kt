@@ -272,7 +272,10 @@ class ConversationRepository(
             updateAt = conversation.updateAt.toEpochMilli(),
             assistantId = conversation.assistantId.toString(),
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
-            isPinned = conversation.isPinned
+            isPinned = conversation.isPinned,
+            customSystemPrompt = conversation.customSystemPrompt ?: "",
+            modeInjectionIds = JsonInstant.encodeToString(conversation.modeInjectionIds),
+            lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
         )
     }
 
@@ -289,6 +292,9 @@ class ConversationRepository(
             assistantId = Uuid.parse(conversationEntity.assistantId),
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
+            customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
+            modeInjectionIds = JsonInstant.decodeFromString(conversationEntity.modeInjectionIds),
+            lorebookIds = JsonInstant.decodeFromString(conversationEntity.lorebookIds),
         )
     }
 
@@ -335,6 +341,10 @@ class ConversationRepository(
                 val page = try {
                     messageNodeDAO.getNodesOfConversationPaged(conversationId, pageSize, offset)
                 } catch (e: SQLiteBlobTooBigException) {
+                    e.printStackTrace()
+                    offset += pageSize
+                    continue
+                } catch (e: IllegalStateException) {
                     e.printStackTrace()
                     offset += pageSize
                     continue

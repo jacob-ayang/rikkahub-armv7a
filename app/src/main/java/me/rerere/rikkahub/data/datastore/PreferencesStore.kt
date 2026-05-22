@@ -29,6 +29,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.LEARNING_MODE_PROMPT
+import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
@@ -40,6 +41,7 @@ import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.sync.s3.S3Config
+import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.toMutableStateFlow
@@ -74,6 +76,7 @@ class SettingsStore(
         // UI设置
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_ID = stringPreferencesKey("theme_id")
+        val CUSTOM_THEMES = stringPreferencesKey("custom_themes")
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
 
@@ -119,6 +122,10 @@ class SettingsStore(
         // TTS
         val TTS_PROVIDERS = stringPreferencesKey("tts_providers")
         val SELECTED_TTS_PROVIDER = stringPreferencesKey("selected_tts_provider")
+
+        // ASR
+        val ASR_PROVIDERS = stringPreferencesKey("asr_providers")
+        val SELECTED_ASR_PROVIDER = stringPreferencesKey("selected_asr_provider")
 
         // Web Server
         val WEB_SERVER_ENABLED = booleanPreferencesKey("web_server_enabled")
@@ -183,6 +190,9 @@ class SettingsStore(
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
+                customThemes = preferences[CUSTOM_THEMES]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
@@ -206,6 +216,10 @@ class SettingsStore(
                 } ?: emptyList(),
                 selectedTTSProviderId = preferences[SELECTED_TTS_PROVIDER]?.let { Uuid.parse(it) }
                     ?: DEFAULT_SYSTEM_TTS_ID,
+                asrProviders = preferences[ASR_PROVIDERS]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: emptyList(),
+                selectedASRProviderId = preferences[SELECTED_ASR_PROVIDER]?.let { Uuid.parse(it) },
                 modeInjections = preferences[MODE_INJECTIONS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -259,7 +273,7 @@ class SettingsStore(
             it.copy(
                 providers = providers,
                 assistants = assistants,
-                ttsProviders = ttsProviders
+                ttsProviders = ttsProviders,
             )
         }
         .map { settings ->
@@ -268,6 +282,7 @@ class SettingsStore(
             val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
+            val asrProviders = settings.asrProviders.distinctBy { it.id }
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
@@ -305,6 +320,10 @@ class SettingsStore(
                     )
                 },
                 ttsProviders = settings.ttsProviders.distinctBy { it.id },
+                asrProviders = asrProviders,
+                selectedASRProviderId = settings.selectedASRProviderId
+                    ?.takeIf { id -> asrProviders.any { provider -> provider.id == id } }
+                    ?: asrProviders.firstOrNull()?.id,
                 favoriteModels = settings.favoriteModels.filter { uuid ->
                     settings.providers.flatMap { it.models }.any { it.id == uuid }
                 },
@@ -330,6 +349,7 @@ class SettingsStore(
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
             preferences[THEME_ID] = settings.themeId
+            preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
             preferences[DEVELOPER_MODE] = settings.developerMode
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
@@ -366,6 +386,10 @@ class SettingsStore(
             settings.selectedTTSProviderId?.let {
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
             } ?: preferences.remove(SELECTED_TTS_PROVIDER)
+            preferences[ASR_PROVIDERS] = JsonInstant.encodeToString(settings.asrProviders)
+            settings.selectedASRProviderId?.let {
+                preferences[SELECTED_ASR_PROVIDER] = it.toString()
+            } ?: preferences.remove(SELECTED_ASR_PROVIDER)
             preferences[MODE_INJECTIONS] = JsonInstant.encodeToString(settings.modeInjections)
             preferences[LOREBOOKS] = JsonInstant.encodeToString(settings.lorebooks)
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
@@ -462,6 +486,7 @@ data class Settings(
     val init: Boolean = false,
     val dynamicColor: Boolean = true,
     val themeId: String = PresetThemes[0].id,
+    val customThemes: List<CustomTheme> = emptyList(),
     val developerMode: Boolean = false,
     val displaySetting: DisplaySetting = DisplaySetting(),
     val enableWebSearch: Boolean = false,
@@ -491,6 +516,8 @@ data class Settings(
     val s3Config: S3Config = S3Config(),
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
+    val asrProviders: List<ASRProviderSetting> = emptyList(),
+    val selectedASRProviderId: Uuid? = null,
     val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
     val lorebooks: List<Lorebook> = emptyList(),
     val quickMessages: List<QuickMessage> = emptyList(),
@@ -517,6 +544,9 @@ enum class ChatFontFamily {
     SERIF,
     @SerialName("monospace")
     MONOSPACE,
+
+    @SerialName("custom")
+    CUSTOM,
 }
 
 @Serializable
@@ -552,6 +582,8 @@ data class DisplaySetting(
     val enableLatexRendering: Boolean = true,
     val enableBlurEffect: Boolean = false,
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
+    val chatCustomFontPath: String = "",
+    val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
 )
@@ -617,6 +649,12 @@ fun Settings.getSelectedTTSProvider(): TTSProviderSetting? {
     return selectedTTSProviderId?.let { id ->
         ttsProviders.find { it.id == id }
     } ?: ttsProviders.firstOrNull()
+}
+
+fun Settings.getSelectedASRProvider(): ASRProviderSetting? {
+    return selectedASRProviderId?.let { id ->
+        asrProviders.find { it.id == id }
+    } ?: asrProviders.firstOrNull()
 }
 
 fun Model.findProvider(providers: List<ProviderSetting>, checkOverwrite: Boolean = true): ProviderSetting? {

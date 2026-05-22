@@ -48,7 +48,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -87,8 +86,9 @@ import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
+import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.ui.theme.extendColors
-import me.rerere.rikkahub.data.datastore.ChatFontFamily
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.openUrl
@@ -119,14 +119,11 @@ fun ChatMessage(
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
+    val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
         lineHeight = LocalTextStyle.current.lineHeight * settings.fontSizeRatio,
-        fontFamily = when (settings.chatFontFamily) {
-            ChatFontFamily.DEFAULT -> FontFamily.Default
-            ChatFontFamily.SERIF -> FontFamily.Serif
-            ChatFontFamily.MONOSPACE -> FontFamily.Monospace
-        }
+        fontFamily = chatFontFamily
     )
     var showActionsSheet by remember { mutableStateOf(false) }
     var showSelectCopySheet by remember { mutableStateOf(false) }
@@ -353,8 +350,8 @@ private fun MessagePartsBlock(
                             if (role == MessageRole.USER) {
                                 Surface(
                                     modifier = Modifier.animateContentSize(),
-                                    shape = MaterialTheme.shapes.medium,
-                                    tonalElevation = 2.dp,
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
                                     onClick = { onUserMessageClick?.invoke() },
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
@@ -372,8 +369,8 @@ private fun MessagePartsBlock(
                                 if (settings.displaySetting.showAssistantBubble) {
                                     Surface(
                                         modifier = Modifier.animateContentSize(),
-                                        shape = MaterialTheme.shapes.medium,
-                                        tonalElevation = 2.dp,
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
                                             MarkdownBlock(

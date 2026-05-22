@@ -21,8 +21,8 @@ android {
         applicationId = "me.rerere.rikkahub"
         minSdk = 26
         targetSdk = 37
-        versionCode = 154
-        versionName = "2.1.11"
+        versionCode = 161
+        versionName = "2.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -210,7 +210,8 @@ dependencies {
 
     // Haze (background blur)
     implementation(libs.haze)
-    implementation(libs.haze.materials)
+    implementation(libs.haze.blur)
+    implementation(libs.haze.blur.materials)
 
     // koin
     implementation(platform(libs.koin.bom))
@@ -308,8 +309,9 @@ dependencies {
     implementation(project(":document"))
     implementation(project(":highlight"))
     implementation(project(":search"))
-    implementation(project(":tts"))
+    implementation(project(":speech"))
     implementation(project(":common"))
+    implementation(project(":material3"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
 

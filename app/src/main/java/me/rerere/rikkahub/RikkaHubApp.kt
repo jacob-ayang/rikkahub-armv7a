@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import me.rerere.common.android.appTempFolder
+import com.whl.quickjs.android.QuickJSLoader
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
@@ -60,6 +61,9 @@ class RikkaHubApp : Application() {
 
         // install crash handler
         CrashHandler.install(this)
+
+        // Init QuickJS native library
+        QuickJSLoader.init()
 
         // delete temp files
         deleteTempFiles()
@@ -130,6 +134,16 @@ class RikkaHubApp : Application() {
                         ) != PackageManager.PERMISSION_GRANTED
                     ) {
                         Log.w(TAG, "startWebServerIfEnabled: notification permission not granted, skipping")
+                        return@launch
+                    }
+                    if (Build.VERSION.SDK_INT >= 37 &&
+                        !settings.webServerLocalhostOnly &&
+                        ContextCompat.checkSelfPermission(
+                            this@RikkaHubApp,
+                            android.Manifest.permission.ACCESS_LOCAL_NETWORK
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.w(TAG, "startWebServerIfEnabled: local network permission not granted, skipping")
                         return@launch
                     }
                     val intent = Intent(this@RikkaHubApp, WebServerService::class.java).apply {

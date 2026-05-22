@@ -70,10 +70,12 @@ import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
@@ -96,8 +98,13 @@ data class ChatError(
     val title: String? = null,
     val error: Throwable,
     val conversationId: Uuid? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val solution: ChatErrorSolution? = null,
 )
+
+enum class ChatErrorSolution {
+    CheckTitleModelSettings,
+}
 
 private val inputTransformers by lazy {
     listOf(
@@ -139,9 +146,16 @@ class ChatService(
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
 
-    fun addError(error: Throwable, conversationId: Uuid? = null, title: String? = null) {
+    fun addError(
+        error: Throwable,
+        conversationId: Uuid? = null,
+        title: String? = null,
+        solution: ChatErrorSolution? = null,
+    ) {
         if (error is CancellationException) return
-        _errors.update { it + ChatError(title = title, error = error, conversationId = conversationId) }
+        _errors.update {
+            it + ChatError(title = title, error = error, conversationId = conversationId, solution = solution)
+        }
     }
 
     fun dismissError(id: Uuid) {
@@ -293,11 +307,14 @@ class ChatService(
 
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
-        val processedContent = preprocessUserInputParts(content)
 
         val job = appScope.launch {
             try {
                 val currentConversation = session.state.value
+                val settings = settingsStore.settingsFlow.first()
+                val assistant = settings.getAssistantById(currentConversation.assistantId)
+                    ?: settings.getCurrentAssistant()
+                val processedContent = preprocessUserInputParts(content, assistant)
 
                 // 添加消息到列表
                 val newConversation = currentConversation.copy(
@@ -322,8 +339,7 @@ class ChatService(
         session.setJob(job)
     }
 
-    private fun preprocessUserInputParts(parts: List<UIMessagePart>): List<UIMessagePart> {
-        val assistant = settingsStore.settingsFlow.value.getCurrentAssistant()
+    private fun preprocessUserInputParts(parts: List<UIMessagePart>, assistant: Assistant): List<UIMessagePart> {
         return parts.map { part ->
             when (part) {
                 is UIMessagePart.Text -> {
@@ -453,9 +469,11 @@ class ChatService(
         messageRange: ClosedRange<Int>? = null
     ) {
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.getCurrentChatModel() ?: return
+        val initialConversation = getConversationFlow(conversationId).value
+        val assistant = settings.getAssistantById(initialConversation.assistantId)
+            ?: settings.getCurrentAssistant()
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
 
-        val assistant = settings.getCurrentAssistant()
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
         } else {
@@ -463,7 +481,6 @@ class ChatService(
         }
 
         runCatching {
-            val initialConversation = getConversationFlow(conversationId).value
 
             // reset suggestions
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
@@ -496,11 +513,14 @@ class ChatService(
                         it
                     }
                 },
-                assistant = settings.getCurrentAssistant(),
-                memories = if (settings.getCurrentAssistant().useGlobalMemory) {
+                assistant = assistant,
+                conversationSystemPrompt = conversation.customSystemPrompt,
+                conversationModeInjectionIds = conversation.modeInjectionIds,
+                conversationLorebookIds = conversation.lorebookIds,
+                memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
-                    memoryRepository.getMemoriesOfAssistant(settings.assistantId.toString())
+                    memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
                 },
                 inputTransformers = buildList {
                     addAll(inputTransformers)
@@ -511,8 +531,7 @@ class ChatService(
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
-                    addAll(localTools.getTools(settings.getCurrentAssistant().localTools))
-                    val assistant = settings.getCurrentAssistant()
+                    addAll(localTools.getTools(assistant.localTools))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
@@ -522,7 +541,7 @@ class ChatService(
                             )
                         )
                     }
-                    mcpManager.getAllAvailableTools().forEach { tool ->
+                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
                         add(
                             Tool(
                                 name = "mcp__" + tool.name,
@@ -530,7 +549,7 @@ class ChatService(
                                 parameters = { tool.inputSchema },
                                 needsApproval = tool.needsApproval,
                                 execute = {
-                                    mcpManager.callTool(tool.name, it.jsonObject)
+                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
                                 },
                             )
                         )
@@ -694,7 +713,12 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generate_title))
+            addError(
+                error = it,
+                conversationId = conversationId,
+                title = context.getString(R.string.error_title_generate_title),
+                solution = ChatErrorSolution.CheckTitleModelSettings,
+            )
         }
     }
 
@@ -1063,9 +1087,12 @@ class ChatService(
         parts: List<UIMessagePart>
     ) {
         if (parts.isEmptyInputMessage()) return
-        val processedParts = preprocessUserInputParts(parts)
 
         val currentConversation = getConversationFlow(conversationId).value
+        val settings = settingsStore.settingsFlow.first()
+        val assistant = settings.getAssistantById(currentConversation.assistantId)
+            ?: settings.getCurrentAssistant()
+        val processedParts = preprocessUserInputParts(parts, assistant)
         var edited = false
 
         val updatedNodes = currentConversation.messageNodes.map { node ->
@@ -1119,6 +1146,9 @@ class ChatService(
             id = Uuid.random(),
             assistantId = currentConversation.assistantId,
             messageNodes = copiedNodes,
+            customSystemPrompt = currentConversation.customSystemPrompt,
+            modeInjectionIds = currentConversation.modeInjectionIds,
+            lorebookIds = currentConversation.lorebookIds,
         )
 
         saveConversation(forkConversation.id, forkConversation)
