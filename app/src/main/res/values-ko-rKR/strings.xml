@@ -665,8 +665,8 @@
   <string name="setting_display_page_send_on_enter_title">Enter 키로 전송</string>
   <string name="setting_display_page_show_assistant_bubble_desc">어시스턴트 메시지에 말풍선 배경 표시 여부</string>
   <string name="setting_display_page_show_assistant_bubble_title">어시스턴트 메시지 버블 표시</string>
-  <string name="setting_display_page_show_date_below_name_desc">닉네임 또는 모델 이름 아래에 메시지 날짜를 표시할지 여부</string>
-  <string name="setting_display_page_show_date_below_name_title">이름 아래 날짜 표시</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">각 메시지 아래에 날짜와 시간을 표시합니다</string>
+  <string name="setting_display_page_show_datetime_in_message_title">메시지에 날짜와 시간 표시</string>
   <string name="setting_display_page_show_line_numbers_desc">코드 블록에 줄 번호 표시</string>
   <string name="setting_display_page_show_line_numbers_title">줄 번호 표시</string>
   <string name="setting_display_page_show_message_jumper_desc">채팅 목록을 스크롤할 때 오른쪽에 빠른 점프 버튼 표시</string>
@@ -1095,5 +1095,16 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_page_preferences_general_desc">상호작용 방식, 스크롤, 입력 설정</string>
   <string name="setting_page_preferences_ui">UI 환경설정</string>
   <string name="setting_page_preferences_ui_desc">메시지 표시, 글꼴, 코드 블록</string>
+  <string name="skills_page_import_from_file">파일에서 가져오기</string>
+  <string name="skills_page_add_manually">수동으로 추가</string>
+  <string name="setting_model_page_tab_model">모델</string>
+  <string name="setting_model_page_tab_prompt">프롬프트</string>
+  <string name="setting_model_page_prompt_translation">번역</string>
+  <string name="setting_model_page_prompt_title">제목 생성</string>
+  <string name="setting_model_page_prompt_suggestion">채팅 답변 제안</string>
+  <string name="setting_model_page_prompt_ocr">OCR 인식</string>
+  <string name="setting_model_page_prompt_compress">컨텍스트 압축</string>
+  <string name="setting_display_page_bubble_opacity_title">버블 불투명도</string>
+  <string name="setting_provider_page_include_history_reasoning">이전 추론 내용 전송</string>
 </resources>
 

@@ -665,8 +665,8 @@
   <string name="setting_display_page_send_on_enter_title">按 Enter 鍵傳送</string>
   <string name="setting_display_page_show_assistant_bubble_desc">是否顯示助理訊息的泡泡背景</string>
   <string name="setting_display_page_show_assistant_bubble_title">顯示助理訊息氣泡</string>
-  <string name="setting_display_page_show_date_below_name_desc">是否在暱稱或模型名稱下方顯示訊息日期</string>
-  <string name="setting_display_page_show_date_below_name_title">在名稱下方顯示日期</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">在每則訊息下方顯示日期與時間</string>
+  <string name="setting_display_page_show_datetime_in_message_title">在訊息中顯示日期和時間</string>
   <string name="setting_display_page_show_line_numbers_desc">在程式碼區塊中顯示行號</string>
   <string name="setting_display_page_show_line_numbers_title">顯示行號</string>
   <string name="setting_display_page_show_message_jumper_desc">在捲動聊天列表時，在右側顯示快速跳轉按鈕</string>
@@ -1093,5 +1093,16 @@
   <string name="setting_page_preferences_general_desc">互動行為、捲動、輸入設定</string>
   <string name="setting_page_preferences_ui">UI 偏好設定</string>
   <string name="setting_page_preferences_ui_desc">訊息顯示、字型、程式碼區塊</string>
+  <string name="skills_page_import_from_file">從檔案匯入</string>
+  <string name="skills_page_add_manually">手動新增</string>
+  <string name="setting_model_page_tab_model">模型</string>
+  <string name="setting_model_page_tab_prompt">提示詞</string>
+  <string name="setting_model_page_prompt_translation">翻譯</string>
+  <string name="setting_model_page_prompt_title">標題生成</string>
+  <string name="setting_model_page_prompt_suggestion">聊天回覆建議</string>
+  <string name="setting_model_page_prompt_ocr">OCR 辨識</string>
+  <string name="setting_model_page_prompt_compress">上下文壓縮</string>
+  <string name="setting_display_page_bubble_opacity_title">氣泡透明度</string>
+  <string name="setting_provider_page_include_history_reasoning">回傳歷史思考過程</string>
 </resources>
 

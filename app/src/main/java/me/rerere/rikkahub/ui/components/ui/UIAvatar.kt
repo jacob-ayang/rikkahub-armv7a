@@ -3,7 +3,9 @@ package me.rerere.rikkahub.ui.components.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -23,7 +24,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -59,9 +63,9 @@ fun TextAvatar(
 ) {
     Box(
         modifier = modifier
+            .then(Modifier.size(32.dp))
             .clip(shape = rememberAvatarShape(loading))
-            .background(color)
-            .size(32.dp),
+            .background(color),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -105,7 +109,7 @@ fun UIAvatar(
         }
     }
 
-    Box(modifier = modifier.size(32.dp)) {
+    Box(modifier = modifier.then(Modifier.size(32.dp))) {
         Surface(
             shape = rememberAvatarShape(loading),
             modifier = Modifier.fillMaxSize(),
@@ -144,13 +148,9 @@ fun UIAvatar(
                     }
 
                     is Avatar.Dummy -> {
-                        Text(
-                            text = name
-                                .ifBlank { stringResource(R.string.user_default_name) }
-                                .takeIf { it.isNotEmpty() }
-                                ?.firstOrNull()?.toString()?.uppercase() ?: "A",
-                            fontSize = 20.sp,
-                            lineHeight = 1.em
+                        ProceduralAvatar(
+                            name = name,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
@@ -247,7 +247,7 @@ fun UIAvatar(
             onDismissRequest = {
                 showEmojiPicker = false
             },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
         ) {
             EmojiPicker(
                 onEmojiSelected = { emoji ->
@@ -301,6 +301,32 @@ fun UIAvatar(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ProceduralAvatar(name: String, modifier: Modifier = Modifier) {
+    val seed = remember(name) {
+        name.ifBlank { "?" }.fold(5381) { h, c -> h * 33 xor c.code }
+    }
+    Canvas(modifier = modifier) {
+        val hue = ((seed % 360 + 360) % 360).toFloat()
+        val bg = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.35f, 0.95f)))
+        val fg = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 0.65f, 0.50f)))
+        drawRect(bg)
+        val cw = size.width / 5f
+        val ch = size.height / 5f
+        val bits = seed ushr 1
+        for (row in 0..4) {
+            for (col in 0..2) {
+                if (bits and (1 shl (row * 3 + col)) != 0) {
+                    drawRect(fg, Offset(col * cw, row * ch), Size(cw, ch))
+                    if (col != 2) {
+                        drawRect(fg, Offset((4 - col) * cw, row * ch), Size(cw, ch))
+                    }
+                }
+            }
+        }
     }
 }
 

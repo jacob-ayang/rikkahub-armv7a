@@ -665,8 +665,8 @@
   <string name="setting_display_page_send_on_enter_title">Отправлять по Enter</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Показывать фоновый пузырь для сообщений ассистента</string>
   <string name="setting_display_page_show_assistant_bubble_title">Показывать всплывающее сообщение ассистента</string>
-  <string name="setting_display_page_show_date_below_name_desc">Показывать дату сообщения под ником или названием модели</string>
-  <string name="setting_display_page_show_date_below_name_title">Показывать дату под именем</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">Показывать дату и время под каждым сообщением</string>
+  <string name="setting_display_page_show_datetime_in_message_title">Показывать дату и время в сообщении</string>
   <string name="setting_display_page_show_line_numbers_desc">Отображать номера строк в блоках кода</string>
   <string name="setting_display_page_show_line_numbers_title">Показывать номера строк</string>
   <string name="setting_display_page_show_message_jumper_desc">Отображать кнопки быстрого перехода справа при прокрутке списка чатов</string>
@@ -1095,5 +1095,16 @@
   <string name="setting_page_preferences_general_desc">Поведение взаимодействия, прокрутка, настройки ввода</string>
   <string name="setting_page_preferences_ui">Настройки интерфейса</string>
   <string name="setting_page_preferences_ui_desc">Отображение сообщений, шрифты, блоки кода</string>
+  <string name="skills_page_import_from_file">Импортировать из файла</string>
+  <string name="skills_page_add_manually">Добавить вручную</string>
+  <string name="setting_model_page_tab_model">Модель</string>
+  <string name="setting_model_page_tab_prompt">Промпты</string>
+  <string name="setting_model_page_prompt_translation">Перевод</string>
+  <string name="setting_model_page_prompt_title">Генерация заголовка</string>
+  <string name="setting_model_page_prompt_suggestion">Подсказки ответов в чате</string>
+  <string name="setting_model_page_prompt_ocr">OCR распознавание</string>
+  <string name="setting_model_page_prompt_compress">Сжатие контекста</string>
+  <string name="setting_display_page_bubble_opacity_title">Прозрачность пузырьков</string>
+  <string name="setting_provider_page_include_history_reasoning">Отправлять историю рассуждений</string>
 </resources>
 

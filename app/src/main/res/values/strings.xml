@@ -672,8 +672,8 @@
   <string name="setting_display_page_send_on_enter_title">Send on Enter</string>
   <string name="setting_display_page_show_assistant_bubble_desc">Whether to show bubble background for assistant messages</string>
   <string name="setting_display_page_show_assistant_bubble_title">Show Assistant Message Bubble</string>
-  <string name="setting_display_page_show_date_below_name_desc">Whether to show message date below nickname or model name</string>
-  <string name="setting_display_page_show_date_below_name_title">Show Date Below Name</string>
+  <string name="setting_display_page_show_datetime_in_message_desc">Show date and time below each message</string>
+  <string name="setting_display_page_show_datetime_in_message_title">Show Date and Time in Message</string>
   <string name="setting_display_page_show_line_numbers_desc">Display line numbers in code blocks</string>
   <string name="setting_display_page_show_line_numbers_title">Show Line Numbers</string>
   <string name="setting_display_page_show_message_jumper_desc">Display quick jump buttons on the right when scrolling the chat list</string>
@@ -1093,5 +1093,16 @@
   <string name="web_search_enabled">Web search enabled</string>
   <string name="setting_theme_page_delete_theme_title">Delete Theme</string>
   <string name="setting_theme_page_delete_theme_message">Are you sure you want to delete this theme?</string>
+  <string name="skills_page_import_from_file">Import from File</string>
+  <string name="skills_page_add_manually">Add manually</string>
+  <string name="setting_model_page_tab_model">Model</string>
+  <string name="setting_model_page_tab_prompt">Prompts</string>
+  <string name="setting_model_page_prompt_translation">Translation</string>
+  <string name="setting_model_page_prompt_title">Title Generation</string>
+  <string name="setting_model_page_prompt_suggestion">Chat Reply Suggestions</string>
+  <string name="setting_model_page_prompt_ocr">OCR Recognition</string>
+  <string name="setting_model_page_prompt_compress">Context Compression</string>
+  <string name="setting_display_page_bubble_opacity_title">Bubble Opacity</string>
+  <string name="setting_provider_page_include_history_reasoning">Include History Reasoning</string>
 </resources>
 
