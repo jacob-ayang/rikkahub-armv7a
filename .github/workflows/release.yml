@@ -34,7 +34,8 @@ permissions:
 
 concurrency:
   group: armv7-build-${{ inputs.upstream_tag || 'sync' }}
-  cancel-in-progress: false
+  # Superseded bootstrap builds may be cancelled; production releases stay serialized.
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 defaults:
   run:

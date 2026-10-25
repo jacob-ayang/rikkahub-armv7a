@@ -51,6 +51,10 @@ def apply(root):
     installer = root / "workspace/src/main/java/me/rerere/workspace/RootfsInstaller.kt"
     replace_once(installer, 'extractTar(archive, stagingDir, format, onProgress)\n            linuxDir.deleteRecursively()',
                  'extractTar(archive, stagingDir, format, onProgress)\n            Armv7Rootfs.validate(stagingDir)\n            linuxDir.deleteRecursively()')
+    fixture = root / "workspace/src/test/java/me/rerere/workspace/ExampleUnitTest.kt"
+    replace_once(fixture, 'val archive = tarGz(\n            TarTestEntry("bin/", type = \'5\'),',
+                 'val archive = tarGz(\n            TarTestEntry("bin/", type = \'5\'),\n'
+                 '            TarTestEntry("bin/bash", content = armv7TestShellElf(), mode = 493),')
     templates = {
         "Armv7Updates.kt": "app/src/main/java/me/rerere/rikkahub/utils/Armv7Updates.kt",
         "Armv7Rootfs.kt": "workspace/src/main/java/me/rerere/workspace/Armv7Rootfs.kt",

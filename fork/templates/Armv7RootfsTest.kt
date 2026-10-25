@@ -10,14 +10,7 @@ class Armv7RootfsTest {
         try {
             val binary = root.resolve("usr/bin/bash")
             binary.parentFile.mkdirs()
-            val elf = ByteArray(20)
-            elf[0] = 0x7f
-            elf[1] = 'E'.code.toByte()
-            elf[2] = 'L'.code.toByte()
-            elf[3] = 'F'.code.toByte()
-            elf[4] = 1
-            elf[5] = 1
-            elf[18] = 40
+            val elf = armv7TestShellElf()
             binary.writeBytes(elf)
             Armv7Rootfs.validate(root)
             elf[4] = 2
@@ -28,4 +21,14 @@ class Armv7RootfsTest {
             root.deleteRecursively()
         }
     }
+}
+
+internal fun armv7TestShellElf() = ByteArray(20).apply {
+    this[0] = 0x7f
+    this[1] = 'E'.code.toByte()
+    this[2] = 'L'.code.toByte()
+    this[3] = 'F'.code.toByte()
+    this[4] = 1
+    this[5] = 1
+    this[18] = 40
 }
