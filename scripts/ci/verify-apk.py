@@ -23,10 +23,18 @@ def run(*args):
 
 def certificate(apksigner, apk):
     result = run(apksigner, "verify", "--verbose", "--print-certs", apk)
-    certs = re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)", result)
+    signer_count = re.search(r"(?m)^Number of signers:\s*(\d+)\s*$", result)
+    if signer_count and int(signer_count[1]) != 1:
+        raise RuntimeError("APK must have exactly one verified signing certificate")
+    # Build-tools 37 labels signing schemes (V2 Signer, V3.1 Signer) instead
+    # of Signer #1. The same identity can be listed once per signing scheme.
+    certs = {value.lower() for value in re.findall(
+        r"(?m)^(?:Signer #\d+|V[\d.]+ Signer(?: #\d+)?):? certificate SHA-256 digest: ([0-9a-fA-F]{64})\s*$",
+        result,
+    )}
     if len(certs) != 1:
         raise RuntimeError("APK must have exactly one verified signing certificate")
-    return certs[0]
+    return certs.pop()
 
 
 def main():

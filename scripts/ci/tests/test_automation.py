@@ -21,6 +21,7 @@ def module(name):
 automation = module("automation")
 overlay = module("apply-overlay")
 secrets = module("prepare-build-secrets")
+apk_checks = module("verify-apk")
 
 
 def release(tag, date="2026-10-24T12:03:22Z", **kwargs):
@@ -301,6 +302,23 @@ class SecretTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Missing required secrets"):
                 secrets.prepare(Path(temporary))
             self.assertEqual(list(Path(temporary).iterdir()), [])
+
+
+class CertificateTest(unittest.TestCase):
+    def test_old_and_new_apksigner_formats(self):
+        for output in (
+            "Number of signers: 1\nSigner #1 certificate SHA-256 digest: " + "a" * 64,
+            "Number of signers: 1\nV2 Signer: certificate SHA-256 digest: " + "a" * 64 +
+            "\nV3.1 Signer: certificate SHA-256 digest: " + "a" * 64,
+        ):
+            with patch.object(apk_checks, "run", return_value=output):
+                self.assertEqual(apk_checks.certificate("apksigner", "app.apk"), "a" * 64)
+
+    def test_multiple_signers_are_rejected(self):
+        output = "Number of signers: 2\nSigner #1 certificate SHA-256 digest: " + "a" * 64
+        with patch.object(apk_checks, "run", return_value=output):
+            with self.assertRaisesRegex(RuntimeError, "exactly one"):
+                apk_checks.certificate("apksigner", "app.apk")
 
 
 class UploadRetryTest(unittest.TestCase):
