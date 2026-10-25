@@ -15,5 +15,9 @@
   "ndk": "29.0.14206865",
   "cmake": "3.22.1",
   "sdk_platform": "android-37.2",
-  "build_tools": "37.0.0"
+  "build_tools": "37.0.0",
+  "cmdline_tools": {
+    "url": "https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip",
+    "sha256": "0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8"
+  }
 }

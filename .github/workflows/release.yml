@@ -128,18 +128,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: source/web-ui
         run: pnpm install --frozen-lockfile
-      - uses: android-actions/setup-android@v3
-      - name: Install locked Android toolchain
+      - name: Install checksum-locked Android SDK command-line tools
         working-directory: source
-        run: |
-          python3 - <<'PYCODE'
-          import json, subprocess
-          cfg = json.load(open('fork/config.json'))
-          packages = ['platform-tools', 'platforms;' + cfg['sdk_platform'],
-                      'platforms;android-37.0', 'build-tools;' + cfg['build_tools'],
-                      'ndk;' + cfg['ndk'], 'cmake;' + cfg['cmake']]
-          subprocess.run(['sdkmanager', *packages], check=True)
-          PYCODE
+        run: python3 scripts/ci/setup-android.py
       - uses: gradle/actions/setup-gradle@v4
       - name: Validate and decode signing and Firebase configuration
         working-directory: source
