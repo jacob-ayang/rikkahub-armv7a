@@ -43,6 +43,7 @@ Allow Actions contents/issue writes. Master is currently unprotected; if branch 
 introduced, grant the automation an appropriate update path before enabling it. The controller
 uses a normal fast-forward push and never bypasses a rejected update.
 
+A SHA-256-pinned official command-line tools archive replaces the retired SDK `tools` package.
 JDK 21, Node 22, pnpm 11, recursive Git submodules, SDK 37.2/37.0, build-tools 37.0.0,
 NDK 29.0.14206865 and CMake 3.22.1 are prepared by the reusable workflow. Tool versions live in
 `fork/config.json`; source archive hashes live in `fork/native/sources.json`.
@@ -54,12 +55,17 @@ current development master. Its source commit is retained under `build/armv7/<fu
 
 The workflow creates a draft, uploads the APK, SHA256SUMS, and finally build-info.json.
 It checks the uploaded APK digest/size and provenance before allowing publication. A complete
-verified draft is reused on retry without rebuilding. Incomplete drafts are repaired. Published
+verified draft is reused on retry without rebuilding when its build inputs match.
+Changed app/native/toolchain adapters rebuild drafts; controller-only changes and device approval
+do not invalidate the tested APK. Incomplete drafts are repaired. Published
 complete releases are never rebuilt or replaced automatically; conflicting published assets
 require inspection. Upstream tag movement fails provenance validation rather than relabeling an APK.
 
 build-info.json records upstream/source/controller SHAs, the adapter hash, version/SDK/ABI,
 APK SHA-256, signing certificate, native source locks and generated binary checksums.
+
+AGP release unit-test components are explicitly enabled in gradle.properties; current AGP defaults
+to debug-only unit tests.
 
 The APK check validates every native ELF and its non-system dependencies, required SQLite,
 QuickJS, tokenizer, terminal, workspace and PRoot binaries, package ID, version and certificate.

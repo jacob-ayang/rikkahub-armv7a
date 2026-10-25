@@ -96,7 +96,9 @@ class ManifestTest(unittest.TestCase):
     def data(self, api, asset):
         if asset["name"] == "build-info.json":
             return json.dumps(self.manifest).encode()
-        return ("b" * 64 + "  test.apk\n").encode()
+        import hashlib
+        info_hash = hashlib.sha256(json.dumps(self.manifest).encode()).hexdigest()
+        return ("b" * 64 + "  test.apk\n" + info_hash + "  build-info.json\n").encode()
 
     def test_complete_release_is_verified(self):
         with patch.object(automation, "asset_bytes", side_effect=self.data):
@@ -165,11 +167,48 @@ class OverlayTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "fork").mkdir()
-            (root / "fork/config.json").write_text("first")
+            (root / "fork/config.json").write_text('{"schema": 1}')
             first = automation.overlay_hash(root)
             self.assertEqual(first, automation.overlay_hash(root))
-            (root / "fork/config.json").write_text("second")
+            (root / "fork/config.json").write_text('{"schema": 2}')
             self.assertNotEqual(first, automation.overlay_hash(root))
+
+    def test_approving_tested_apk_does_not_change_build_fingerprint(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "fork").mkdir()
+            path = root / "fork/config.json"
+            path.write_text('{"schema":1,"device_validation":{"approved":false}}')
+            first = automation.overlay_hash(root)
+            path.write_text('{"schema":1,"device_validation":{"approved":true,"baseline_apk_sha256":"abc"}}')
+            self.assertEqual(first, automation.overlay_hash(root))
+
+    def test_changed_adapter_rebuilds_draft_but_not_published_release(self):
+        args = type("Args", (), dict(tag="3.1.1", upstream_sha="a" * 40))()
+        api = unittest.mock.Mock()
+        with patch.object(automation, "GitHub", return_value=api), \
+                patch.object(automation, "release_manifest", return_value=dict(build_overlay_sha256="old")), \
+                patch.object(automation, "build_hash", return_value="new"), \
+                patch.object(automation, "output") as output:
+            api.release.return_value = dict(draft=True)
+            automation.status(args)
+            output.assert_called_with("ready", "false")
+            api.release.return_value = dict(draft=False)
+            automation.status(args)
+            output.assert_called_with("ready", "true")
+
+    def test_controller_changes_do_not_rebuild_tested_apk(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".github/workflows").mkdir(parents=True)
+            workflow = root / ".github/workflows/release.yml"
+            workflow.write_text("bootstrap")
+            before = automation.build_hash(root)
+            workflow.write_text("production")
+            self.assertEqual(before, automation.build_hash(root))
+            (root / "fork").mkdir()
+            (root / "fork/armv7.gradle").write_text("changed native configuration")
+            self.assertNotEqual(before, automation.build_hash(root))
 
 
 class DeviceGateTest(unittest.TestCase):
@@ -183,6 +222,18 @@ class DeviceGateTest(unittest.TestCase):
                 patch.object(automation, "release_manifest", return_value=dict(apk_sha256="b" * 64)), \
                 patch.object(automation, "output"), contextlib.redirect_stdout(io.StringIO()):
             automation.publish(args)
+        api.request.assert_not_called()
+
+    def test_replaced_baseline_apk_cannot_be_published_as_device_approved(self):
+        cfg = automation.config()
+        cfg["device_validation"] = dict(approved=True, baseline_apk_sha256="b" * 64)
+        api = unittest.mock.Mock()
+        api.release.return_value = dict(draft=True)
+        args = type("Args", (), dict(tag="3.1.1", upstream_sha="a" * 40))()
+        with patch.object(automation, "config", return_value=cfg), patch.object(automation, "GitHub", return_value=api), \
+                patch.object(automation, "release_manifest", side_effect=[dict(apk_sha256="b" * 64), dict(apk_sha256="c" * 64)]):
+            with self.assertRaisesRegex(RuntimeError, "tested baseline APK"):
+                automation.publish(args)
         api.request.assert_not_called()
 
     def test_missing_approval_checksum_blocks_publication(self):
@@ -204,6 +255,55 @@ class SecretTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Missing required secrets"):
                 secrets.prepare(Path(temporary))
             self.assertEqual(list(Path(temporary).iterdir()), [])
+
+
+class UploadRetryTest(unittest.TestCase):
+    def test_upload_failure_leaves_no_completion_marker_and_retry_preserves_apk(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="test.apk")
+            (root / "build-info.json").write_text(json.dumps(manifest))
+            (root / "SHA256SUMS").write_text("checksums")
+            (root / "test.apk").write_bytes(b"apk")
+            draft = dict(id=1, draft=True, upload_url="https://uploads.github.com/test{?name}",
+                         assets=[dict(id=2, name="test.apk")])
+            args = type("Args", (), dict(directory=temporary, tag="3.1.1", upstream_sha="a" * 40))()
+            api = unittest.mock.Mock()
+            api.release.return_value = draft
+            uploads = []
+
+            def request(path, method="GET", data=None, **kwargs):
+                if method == "POST":
+                    uploads.append(path)
+                    if "SHA256SUMS" in path:
+                        raise RuntimeError("network interrupted")
+                return None
+
+            api.request.side_effect = request
+            with patch.object(automation, "GitHub", return_value=api), \
+                    patch.object(automation, "asset_bytes", return_value=b"apk"):
+                with self.assertRaisesRegex(RuntimeError, "network interrupted"):
+                    automation.upload(args)
+            self.assertEqual(len(uploads), 1)
+            self.assertNotIn("build-info.json", uploads[0])
+            self.assertNotIn("test.apk", uploads[0])
+            self.assertFalse(any(call.args[1:2] == ("DELETE",) for call in api.request.call_args_list))
+
+    def test_published_apk_is_never_replaced_on_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="test.apk")
+            (root / "build-info.json").write_text(json.dumps(manifest))
+            (root / "test.apk").write_bytes(b"new apk")
+            api = unittest.mock.Mock()
+            api.release.return_value = dict(draft=False, assets=[dict(id=2, name="test.apk")])
+            args = type("Args", (), dict(directory=temporary, tag="3.1.1", upstream_sha="a" * 40))()
+            with patch.object(automation, "GitHub", return_value=api), \
+                    patch.object(automation, "release_manifest", return_value=None), \
+                    patch.object(automation, "asset_bytes", return_value=b"old apk"):
+                with self.assertRaisesRegex(RuntimeError, "Refusing to replace published asset"):
+                    automation.upload(args)
+            api.request.assert_not_called()
 
 
 if __name__ == "__main__":

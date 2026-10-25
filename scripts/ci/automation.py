@@ -115,7 +115,8 @@ def release_manifest(api, release, upstream_sha):
     assets = {a["name"]: a for a in release["assets"]}
     if "build-info.json" not in assets or "SHA256SUMS" not in assets:
         return None
-    manifest = json.loads(asset_bytes(api, assets["build-info.json"]))
+    info_bytes = asset_bytes(api, assets["build-info.json"])
+    manifest = json.loads(info_bytes)
     if manifest.get("upstream_sha") != upstream_sha or manifest.get("tag") != release["tag_name"]:
         raise RuntimeError("Existing release provenance does not match the upstream tag")
     apk = assets.get(manifest["apk"])
@@ -124,6 +125,8 @@ def release_manifest(api, release, upstream_sha):
     checksums = asset_bytes(api, assets["SHA256SUMS"]).decode()
     if f"{manifest['apk_sha256']}  {manifest['apk']}" not in checksums.splitlines():
         raise RuntimeError("Existing release has inconsistent checksums")
+    if f"{hashlib.sha256(info_bytes).hexdigest()}  build-info.json" not in checksums.splitlines():
+        raise RuntimeError("Existing release metadata checksum mismatch")
     remote_digest = apk.get("digest")
     if remote_digest and remote_digest != "sha256:" + manifest["apk_sha256"]:
         raise RuntimeError("GitHub APK digest does not match the manifest")
@@ -140,15 +143,29 @@ def select_releases(upstream_releases, local_releases, baseline):
     return [(r, local.get(r["tag_name"])) for r in sorted(formal, key=lambda r: r["published_at"])]
 
 
-def overlay_hash(root=ROOT):
+def overlay_hash(root=ROOT, owned_paths=OWNED):
     result = hashlib.sha256()
-    for owned in OWNED:
+    for owned in owned_paths:
         base = root / owned
         paths = sorted(base.rglob("*")) if base.is_dir() else [base]
         for path in paths:
             if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
-                result.update(str(path.relative_to(root)).encode() + b"\0" + path.read_bytes())
+                data = path.read_bytes()
+                if path.relative_to(root).as_posix() == "fork/config.json":
+                    cfg = json.loads(data)
+                    # Approving the exact tested APK must not force its rebuild.
+                    cfg.pop("device_validation", None)
+                    data = json.dumps(cfg, sort_keys=True).encode()
+                result.update(str(path.relative_to(root)).encode() + b"\0" + data)
     return result.hexdigest()
+
+
+def build_hash(root=ROOT):
+    # Controller/notification/documentation changes do not invalidate a tested APK.
+    # Every input that changes app sources, signing preparation, or native/toolchain
+    # output is included; the upstream source SHA is validated separately.
+    return overlay_hash(root, ("fork", "scripts/ci/apply-overlay.py", "scripts/ci/build-native.py",
+                               "scripts/ci/setup-android.py", "scripts/ci/prepare-build-secrets.py"))
 
 
 def plan(args):
@@ -208,6 +225,7 @@ def prepare(args):
     copy_owned(ROOT, target)
     subprocess.run([sys.executable, str(target / "scripts/ci/apply-overlay.py"), str(target)], check=True)
     state = {"schema": 1, "upstream_sha": args.upstream_sha, "overlay_sha256": overlay_hash(),
+             "build_overlay_sha256": build_hash(),
              "control_sha": git("rev-parse", "HEAD"), "checked_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     (target / STATE).write_text(json.dumps(state, indent=2) + "\n")
     git("add", "-A", cwd=target)
@@ -246,8 +264,10 @@ def persist(args):
 
 
 def status(args):
-    manifest = release_manifest(GitHub(), GitHub().release(args.tag), args.upstream_sha)
-    output("ready", str(bool(manifest)).lower())
+    release = GitHub().release(args.tag)
+    manifest = release_manifest(GitHub(), release, args.upstream_sha)
+    ready = bool(manifest) and (not release["draft"] or manifest.get("build_overlay_sha256") == build_hash())
+    output("ready", str(ready).lower())
 
 
 def upload(args):

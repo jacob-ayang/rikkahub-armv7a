@@ -105,6 +105,7 @@ def main():
     manifest = {"schema": 1, "tag": args.tag, "version_name": version_name, "version_code": version_code,
                 "min_sdk": min_sdk, "abi": "armeabi-v7a", "upstream_sha": state["upstream_sha"],
                 "source_sha": sha, "control_sha": state["control_sha"], "overlay_sha256": state["overlay_sha256"],
+                "build_overlay_sha256": state["build_overlay_sha256"],
                 "apk": name, "apk_size": apk.stat().st_size, "apk_sha256": apk_hash,
                 "certificate_sha256": cert,
                 "native": json.loads((ROOT / "native-build-info.json").read_text())}

@@ -1,7 +1,7 @@
 package me.rerere.workspace
 
-import java.io.File
 import java.io.DataInputStream
+import java.io.File
 
 /** Validate the extracted guest, before replacing an existing working rootfs. */
 internal object Armv7Rootfs {
@@ -9,7 +9,8 @@ internal object Armv7Rootfs {
         val candidates = listOf(
             "usr/bin/bash", "bin/bash", "usr/bin/dash", "bin/dash", "bin/busybox", "usr/bin/busybox",
         )
-        val binary = candidates.map { File(root, it) }.firstOrNull { it.isFile && !java.nio.file.Files.isSymbolicLink(it.toPath()) }
+        val binary = candidates.map { File(root, it) }
+            .firstOrNull { it.isFile && !java.nio.file.Files.isSymbolicLink(it.toPath()) }
             ?: error("Rootfs has no supported shell executable")
         val header = ByteArray(20)
         DataInputStream(binary.inputStream()).use { it.readFully(header) }
