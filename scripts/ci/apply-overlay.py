@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+import re
 import shutil
 
 
@@ -13,6 +14,16 @@ def replace_once(path, old, new):
     if text.count(old) != 1:
         raise RuntimeError(f"Upstream structure changed: {path}: expected exactly one {old!r}")
     path.write_text(text.replace(old, new, 1))
+
+
+def adapt_rootfs_url(path):
+    urls = re.findall(r'https://cdimage\.ubuntu\.com/ubuntu-base/[^"\s]+/ubuntu-base-[^"\s]+-arm(?:64|hf)\.tar\.gz',
+                      path.read_text())
+    if len(urls) != 1:
+        raise RuntimeError(f"Upstream rootfs URL structure changed: {path}")
+    url = urls[0]
+    if url.endswith("-arm64.tar.gz"):
+        replace_once(path, url, url.removesuffix("-arm64.tar.gz") + "-armhf.tar.gz")
 
 
 def apply(root):
@@ -47,7 +58,7 @@ def apply(root):
                  'response.use {\n                        if (it.isSuccessful) {\n                            Armv7Updates.decode(it.body.string())\n                        } else {\n                            throw Exception("Failed to fetch update info: HTTP ${it.code}")\n                        }\n                    }')
 
     page = root / "app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceDetailPage.kt"
-    replace_once(page, 'ubuntu-base-24.04.3-base-arm64.tar.gz', 'ubuntu-base-24.04.3-base-armhf.tar.gz')
+    adapt_rootfs_url(page)
     installer = root / "workspace/src/main/java/me/rerere/workspace/RootfsInstaller.kt"
     replace_once(installer, 'extractTar(archive, stagingDir, format, onProgress)\n            linuxDir.deleteRecursively()',
                  'extractTar(archive, stagingDir, format, onProgress)\n            Armv7Rootfs.validate(stagingDir)\n            linuxDir.deleteRecursively()')

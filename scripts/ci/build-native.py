@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tarfile
@@ -48,6 +49,17 @@ def fetch(name, entry, cache):
 def main():
     cfg = json.loads((ROOT / "fork/config.json").read_text())
     lock = json.loads((ROOT / "fork/native/sources.json").read_text())
+    page = ROOT / "app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/workspace/WorkspaceDetailPage.kt"
+    rootfs_url = re.search(r'https://cdimage\.ubuntu\.com/ubuntu-base/[^"\s]+-armhf\.tar\.gz', page.read_text())[0]
+    # Do not publish a default Linux installer URL that has no 32-bit image.
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(rootfs_url, method="HEAD"), timeout=60):
+                break
+        except (OSError, TimeoutError):
+            if attempt == 3:
+                raise
+            time.sleep(2 ** attempt)
     sdk = Path(os.environ["ANDROID_HOME"])
     ndk = sdk / "ndk" / cfg["ndk"]
     tools = ndk / "toolchains/llvm/prebuilt/linux-x86_64/bin"
@@ -120,7 +132,7 @@ def main():
     for path in (*workspace.glob("*.so"), app / "libsimple.so"):
         run(tools / "llvm-strip", "--strip-unneeded", path)
         path.chmod(0o755)
-    manifest = {"ndk": cfg["ndk"], "sources": lock,
+    manifest = {"ndk": cfg["ndk"], "sources": lock, "rootfs_url": rootfs_url,
                 "outputs": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
                             for p in (*workspace.glob("*.so"), app / "libsimple.so")}}
     (ROOT / "native-build-info.json").write_text(json.dumps(manifest, indent=2) + "\n")

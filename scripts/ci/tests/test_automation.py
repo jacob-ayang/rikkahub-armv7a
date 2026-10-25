@@ -146,6 +146,23 @@ class GitSafetyTest(unittest.TestCase):
 
 
 class OverlayTest(unittest.TestCase):
+    def test_rootfs_version_follows_upstream_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            file = Path(temporary) / "page.kt"
+            for version in ("24.04.3", "24.04.5"):
+                url = f"https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-{version}-base-arm64.tar.gz"
+                file.write_text(f'val url = "{url}"')
+                overlay.adapt_rootfs_url(file)
+                overlay.adapt_rootfs_url(file)
+                self.assertIn(version + "-base-armhf.tar.gz", file.read_text())
+
+    def test_changed_rootfs_source_requires_review(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            file = Path(temporary) / "page.kt"
+            file.write_text('val url = "https://example.org/unknown-rootfs.tar.gz"')
+            with self.assertRaisesRegex(RuntimeError, "rootfs URL structure changed"):
+                overlay.adapt_rootfs_url(file)
+
     def test_replacements_are_idempotent_and_fail_on_upstream_change(self):
         with tempfile.TemporaryDirectory() as temporary:
             file = Path(temporary) / "source"

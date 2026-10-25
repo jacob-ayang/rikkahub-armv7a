@@ -1,4 +1,5 @@
 // Applied after the upstream app configuration. Keep the upstream distribution flavors.
+def forkNdkVersion = new groovy.json.JsonSlurper().parse(rootProject.file('fork/config.json')).ndk as String
 plugins.withId('com.android.application') {
     android {
         defaultConfig {
@@ -12,7 +13,7 @@ plugins.withId('com.android.application') {
                 enable = false
             }
         }
-        ndkVersion = '29.0.14206865'
+        ndkVersion = forkNdkVersion
         signingConfigs {
             release {
                 def signing = new Properties()
