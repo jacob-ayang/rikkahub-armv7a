@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "upstream_sha": "ad2c4430d50ba52392b2941367f98ef59614cb73",
+  "overlay_sha256": "cea5bb9afa886f15aa45da76ca500331375dcb00faea3ab578e4b7cdb83edeb9",
+  "release_workflows_omitted": false,
+  "build_overlay_sha256": "798f1c2e37f7f484d23f935f59b3be1126d145a92f46eed509073738c4264cc8",
+  "control_sha": "8f3c3a2158c4b83b1443a2123ba644af3d3b6b7f",
+  "checked_at": "2026-10-25T10:19:33.842962+00:00"
+}
