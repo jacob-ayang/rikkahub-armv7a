@@ -19,7 +19,8 @@ def prepare(root):
         raise RuntimeError("Signing configuration lacks storePassword, keyAlias or keyPassword")
     # Always use the decoded key at a predictable root-relative path. Old secret
     # configurations sometimes point at app/app.key or an absolute local path.
-    properties = "\n".join(line for line in properties.splitlines() if not line.startswith("storeFile="))
+    properties = "\n".join(line for line in properties.splitlines()
+                           if line.split("=", 1)[0].strip() not in ("storeFile", "sdk.dir", "ndk.dir"))
     properties += "\nstoreFile=rikkahub.keystore\n"
     services = json.loads(firebase)
     if not any(c.get("client_info", {}).get("android_client_info", {}).get("package_name") ==

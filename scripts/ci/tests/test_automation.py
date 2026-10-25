@@ -255,6 +255,22 @@ class DeviceGateTest(unittest.TestCase):
 
 
 class SecretTest(unittest.TestCase):
+    def test_local_sdk_paths_are_not_carried_into_ci(self):
+        import base64
+        services = dict(client=[dict(client_info=dict(android_client_info=dict(package_name="me.rerere.rikkahub")))])
+        signing = "storeFile=/old/key\nsdk.dir=/old/sdk\nndk.dir=/old/ndk\nstorePassword=p\nkeyAlias=k\nkeyPassword=p\n"
+        env = {"KEY_BASE64": base64.b64encode(b"key").decode(),
+               "SIGNING_CONFIG_B64": base64.b64encode(signing.encode()).decode(),
+               "GOOGLE_SERVICES_JSON_B64": base64.b64encode(json.dumps(services).encode()).decode()}
+        with tempfile.TemporaryDirectory() as temporary, patch.dict("os.environ", env):
+            root = Path(temporary)
+            (root / "app").mkdir()
+            secrets.prepare(root)
+            properties = (root / "local.properties").read_text()
+            self.assertNotIn("/old/", properties)
+            self.assertIn("storeFile=rikkahub.keystore", properties)
+            self.assertEqual((root / "rikkahub.keystore").read_bytes(), b"key")
+
     def test_missing_secret_fails_without_writing_files(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict("os.environ", {}, clear=True):
             with self.assertRaisesRegex(RuntimeError, "Missing required secrets"):
