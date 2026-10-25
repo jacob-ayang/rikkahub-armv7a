@@ -42,12 +42,12 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.TavilyOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
-                    put("description", "search keyword")
+                    put("description", SEARCH_QUERY_DESCRIPTION)
                 })
                 put("topic", buildJsonObject {
                     put("type", "string")
@@ -62,8 +62,8 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun scrapingParameters(options: SearchServiceOptions.TavilyOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("url", buildJsonObject {
                     put("type", "string")
@@ -92,7 +92,12 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                 put("max_results", commonOptions.resultSize)
                 put("search_depth", serviceOptions.depth.ifEmpty { "advanced" })
                 put("topic", topic)
-                put("include_answer", "advanced")
+                if (serviceOptions.includeAnswer) {
+                    put("include_answer", "advanced")
+                } else {
+                    put("include_answer", false)
+                }
+                put("include_images", true)
             }
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
@@ -116,7 +121,8 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                                 url = it.url,
                                 text = it.content
                             )
-                        }
+                        },
+                        images = response.images,
                     ))
             } else {
                 error("response failed #${response.code}")

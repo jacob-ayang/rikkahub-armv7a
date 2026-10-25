@@ -1,56 +1,40 @@
-# libsimple.so provenance
+# ARMv7a native provenance
 
-This project uses `libsimple.so` from `wangfenjin/simple` `v0.6.0`.
+Native build inputs are pinned by immutable source URLs and SHA-256 in
+`fork/native/sources.json`. `scripts/ci/build-native.py` verifies each archive before extraction,
+compiles with Android NDK 29.0.14206865 and records binary hashes in native-build-info.json.
+That record is included in every APK's build-info.json.
 
-## Source baseline
+## SQLite tokenizer
 
-- Upstream repo: `https://github.com/wangfenjin/simple`
-- Tag: `v0.6.0`
-- Commit: `da0fd57cfac0194e2f949c975d535383c635919f`
-- Android NDK: `r29` (`android-ndk-r29-linux.zip`, package `ndk;29.0.14206865`)
+- Source: wangfenjin/simple v0.6.1, commit ea854b0a727e9f15f4878ad0ae9f1b738a92afe4.
+- armeabi-v7a, android-21, Release, static libc++, SIMPLE_WITH_JIEBA=OFF,
+  BUILD_SQLITE3=OFF, BUILD_SHELL=OFF, BUILD_TEST_EXAMPLE=OFF.
+- Matches the current upstream tokenizer configuration and SQLite extension API; database schema,
+  migrations and search SQL follow upstream. No old unicode61 fallback patch is carried forward.
+- Output: app/src/main/jniLibs/armeabi-v7a/libsimple.so.
 
-## Build command (armeabi-v7a)
+## PRoot and dependencies
 
-```bash
-python3 -m venv /tmp/cmake-venv
-/tmp/cmake-venv/bin/pip install cmake ninja
+- Termux PRoot v5.1.107.101, commit b27d81a68d765f3462e807f4a14e01a03f8e89ea.
+- talloc 2.4.3, statically linked; cross-configuration answers are versioned under fork/native.
+- termux/libandroid-shmem commit 7f0bd7e25dbdd146265aff7c6a890029e374622d, statically linked.
+- PRoot and the separate freestanding loader are built for ARMv7a, Android API 26. The app supplies
+  PROOT_LOADER and PROOT_TMP_DIR; there is no Termux prefix dependency. The shmem key-file path
+  uses PROOT_TMP_DIR instead of a hardcoded Termux path.
+- Outputs: workspace/src/main/jniLibs/armeabi-v7a/libproot_exec.so and libproot_loader.so.
+- PRoot sources carry GPL-2.0 licensing, talloc LGPL-3.0-or-later, and libandroid-shmem its upstream
+  license. Locked source archives contain the corresponding license and source; preserve provenance
+  and license notices when redistributing these components.
 
-curl -L --fail -o /path/android-ndk-r29-linux.zip \
-  https://dl.google.com/android/repository/android-ndk-r29-linux.zip
-unzip -q /path/android-ndk-r29-linux.zip -d /path
-
-git clone --branch v0.6.0 --depth 1 https://github.com/wangfenjin/simple.git
-cd simple
-
-export PATH="/tmp/cmake-venv/bin:$PATH"
-NDK=/path/android-ndk-r29
-
-cmake -S . -B build-android-armeabi-v7a -G Ninja \
-  -DCMAKE_MAKE_PROGRAM=ninja \
-  -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
-  -DANDROID_ABI=armeabi-v7a \
-  -DANDROID_PLATFORM=android-21 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX="$PWD/output-android-armeabi-v7a" \
-  -DBUILD_TEST_EXAMPLE=OFF \
-  -DBUILD_SHELL=OFF
-
-cmake --build build-android-armeabi-v7a --config Release --parallel
-cmake --install build-android-armeabi-v7a --config Release
-```
-
-Copy output:
+Terminal/workspace JNI libraries are built by their existing CMake projects. SQLite and QuickJS
+native libraries are resolved with the app dependencies. Publication fails if any required ARMv7a
+library is absent or has an unresolved dynamic dependency. Existing upstream 64-bit binaries are
+retained as source but excluded from the ARMv7a APK.
 
 ```bash
-cp output-android-armeabi-v7a/bin/libsimple.so \
-  app/src/main/jniLibs/armeabi-v7a/libsimple.so
+ANDROID_HOME=/path/to/android-sdk python3 scripts/ci/build-native.py
 ```
 
-## SHA-256
-
-- `app/src/main/jniLibs/arm64-v8a/libsimple.so`
-  - `c6f8944d9dfed48caef04a342fcab87c5ebb7ab7bdeb7b5a8bb5e38689ccb5b8`
-- `app/src/main/jniLibs/x86_64/libsimple.so`
-  - `c14959df728630ae391c081106056b5c2ee2dead3abe0a98ec794e9fa7c778e9`
-- `app/src/main/jniLibs/armeabi-v7a/libsimple.so`
-  - `253692506d8788f09b941d64f5a92ea8befe9e178acc8c8e23df25ea4a18cf62`
+Generated binaries are ignored by Git. Native source archives and tool versions must be reviewed
+and their hashes updated deliberately, rather than following a moving native dependency tag.

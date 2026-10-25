@@ -1,8 +1,8 @@
 package me.rerere.rikkahub
 
-import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.QuotaQuery
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.components.ui.encodeForShare
 import org.junit.Assert.assertEquals
@@ -12,7 +12,7 @@ import kotlin.uuid.Uuid
 
 class ShareSheetTest {
     @Test
-    fun `decode should restore OpenAI provider correctly`() {
+    fun `share round trip should restore OpenAI settings without models`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.OpenAI(
             id = originalId,
@@ -28,7 +28,7 @@ class ShareSheetTest {
             baseUrl = "https://api.openai.com/v1",
             chatCompletionsPath = "/chat/completions",
             useResponseApi = false,
-            balanceOption = BalanceOption(enabled = false)
+            quotaQuery = QuotaQuery(enabled = false)
         )
 
         val encoded = original.encodeForShare()
@@ -40,8 +40,7 @@ class ShareSheetTest {
         assertEquals("Test OpenAI", decodedOpenAI.name)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        assertEquals(1, decodedOpenAI.models.size)
-        assertEquals("gpt-4", decodedOpenAI.models[0].displayName)
+        assertTrue(decodedOpenAI.models.isEmpty())
     }
 
     @Test
@@ -92,7 +91,12 @@ class ShareSheetTest {
     }
 
     @Test
-    fun `decode should handle balance option`() {
+    fun `decode should handle quota query`() {
+        val query = QuotaQuery(
+            enabled = true,
+            url = "{{baseUrl}}/custom/credits",
+            resultPath = "data.balance"
+        )
         val original = ProviderSetting.OpenAI(
             id = Uuid.random(),
             enabled = true,
@@ -100,19 +104,27 @@ class ShareSheetTest {
             models = emptyList(),
             apiKey = "test-key",
             baseUrl = "https://api.test.com",
-            balanceOption = BalanceOption(
-                enabled = true,
-                apiPath = "/custom/credits",
-                resultPath = "data.balance"
-            )
+            quotaQuery = query
         )
 
         val encoded = original.encodeForShare()
         val decoded = decodeProviderSetting(encoded) as ProviderSetting.OpenAI
 
-        assertEquals(true, decoded.balanceOption.enabled)
-        assertEquals("/custom/credits", decoded.balanceOption.apiPath)
-        assertEquals("data.balance", decoded.balanceOption.resultPath)
+        assertEquals(query, decoded.quotaQuery)
+    }
+
+    @Test
+    fun `decode should migrate balance option from older versions`() {
+        val json = """{"type":"openai","id":"${Uuid.random()}","name":"Old","apiKey":"k",""" +
+            """"baseUrl":"https://api.test.com","balanceOption":{"enabled":true,"apiPath":"/custom/credits","resultPath":"data.balance"}}"""
+        val encoded = "ai-provider:v1:" + kotlin.io.encoding.Base64.encode(json.encodeToByteArray())
+
+        val decoded = decodeProviderSetting(encoded) as ProviderSetting.OpenAI
+
+        assertEquals(
+            QuotaQuery(enabled = true, url = "{{baseUrl}}/custom/credits", resultPath = "data.balance"),
+            decoded.quotaQuery
+        )
     }
 
     @Test(expected = IllegalArgumentException::class)

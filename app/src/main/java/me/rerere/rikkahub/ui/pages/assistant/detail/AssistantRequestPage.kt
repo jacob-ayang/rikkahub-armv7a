@@ -2,12 +2,12 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -53,7 +53,7 @@ fun AssistantRequestPage(id: String) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
         AssistantRequestContent(
-            modifier = Modifier.padding(innerPadding),
+            innerPadding = innerPadding,
             assistant = assistant,
             onUpdate = { vm.update(it) }
         )
@@ -62,15 +62,17 @@ fun AssistantRequestPage(id: String) {
 
 @Composable
 internal fun AssistantRequestContent(
-    modifier: Modifier = Modifier,
+    innerPadding: PaddingValues,
     assistant: Assistant,
     onUpdate: (Assistant) -> Unit
 ) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(horizontal = 16.dp)
+            .padding(innerPadding)
+            .padding(bottom = 16.dp)
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -84,8 +86,6 @@ internal fun AssistantRequestContent(
                 )
             }
         )
-
-        HorizontalDivider()
 
         CustomBodies(
             customBodies = assistant.customBodies,

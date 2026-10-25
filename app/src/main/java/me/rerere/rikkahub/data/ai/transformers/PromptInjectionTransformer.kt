@@ -24,7 +24,7 @@ object PromptInjectionTransformer : InputMessageTransformer {
             messages = messages,
             assistant = ctx.assistant,
             modeInjections = ctx.settings.modeInjections,
-            lorebooks = ctx.settings.lorebooks
+            lorebooks = ctx.settings.lorebooks,
         )
     }
 }
@@ -36,14 +36,14 @@ internal fun transformMessages(
     messages: List<UIMessage>,
     assistant: Assistant,
     modeInjections: List<PromptInjection.ModeInjection>,
-    lorebooks: List<Lorebook>
+    lorebooks: List<Lorebook>,
 ): List<UIMessage> {
     // 收集所有需要注入的内容
     val injections = collectInjections(
         messages = messages,
         assistant = assistant,
         modeInjections = modeInjections,
-        lorebooks = lorebooks
+        lorebooks = lorebooks,
     )
 
     if (injections.isEmpty()) {
@@ -66,7 +66,7 @@ internal fun collectInjections(
     messages: List<UIMessage>,
     assistant: Assistant,
     modeInjections: List<PromptInjection.ModeInjection>,
-    lorebooks: List<Lorebook>
+    lorebooks: List<Lorebook>,
 ): List<PromptInjection> {
     val injections = mutableListOf<PromptInjection>()
 
@@ -134,7 +134,8 @@ internal fun applyInjections(
             }
 
             result[systemIndex] = systemMessage.copy(
-                parts = listOf(UIMessagePart.Text(newText))
+                parts = listOf(UIMessagePart.Text(newText)),
+                isSynthetic = true,
             )
         }
     } else {
@@ -155,7 +156,7 @@ internal fun applyInjections(
         }
 
         if (combinedContent.isNotEmpty()) {
-            result.add(0, UIMessage.system(combinedContent))
+            result.add(0, UIMessage.system(combinedContent).copy(isSynthetic = true))
         }
     }
 
@@ -216,7 +217,9 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
             when (role) {
                 MessageRole.ASSISTANT -> UIMessage.assistant(mergedContent)
                 else -> UIMessage.user(mergedContent)
-            }
+            }.copy(
+                isSynthetic = true,
+            )
         }
 }
 

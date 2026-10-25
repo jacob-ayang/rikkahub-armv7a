@@ -1,14 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import android.net.Uri
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Camera01
-import me.rerere.hugeicons.stroke.DragDropHorizontal
-import me.rerere.hugeicons.stroke.Image02
-import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Cancel01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -24,82 +16,102 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.items
-import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastForEachIndexed
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dokar.sonner.ToastType
-import io.github.g00fy2.quickie.QRResult
-import io.github.g00fy2.quickie.ScanQRCode
+import me.rerere.ui.toast.ToastType
+import kotlin.uuid.Uuid
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Camera01
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.components.ui.QRCodeScannerDialog
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.RECOMMENDED_PROVIDERS
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.components.ui.cardGroupItemShape
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
+import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
+import me.rerere.rikkahub.utils.plus
+import me.rerere.ui.components.RikkaConfirmDialog
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyStaggeredGridState
-import java.util.Locale
-import kotlinx.coroutines.launch
-import kotlin.uuid.Uuid
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
-    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
-    val lazyListState = rememberLazyStaggeredGridState()
-    val reorderableState = rememberReorderableLazyStaggeredGridState(lazyListState) { from, to ->
+    var deleteTarget by remember { mutableStateOf<ProviderSetting?>(null) }
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
         val newProviders = settings.providers.toMutableList().apply {
             add(to.index, removeAt(from.index))
         }
-        vm.updateSettings(settings.copy(providers = newProviders))
+        vm.updateSettings { it.copy(providers = newProviders) }
     }
 
     val filteredProviders = remember(settings.providers, searchQuery) {
@@ -109,6 +121,26 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
             settings.providers.filter { provider ->
                 provider.name.contains(searchQuery, ignoreCase = true)
             }
+        }
+    }
+
+    // 设置是异步写入的，等新提供商真正出现在列表里再滚过去；新建时会跳详情页，所以要能跨页面保存
+    var pendingScrollId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(pendingScrollId, filteredProviders) {
+        val id = pendingScrollId ?: return@LaunchedEffect
+        val index = filteredProviders.indexOfFirst { it.id.toString() == id }
+        if (index >= 0) {
+            lazyListState.animateScrollToItem(index)
+            pendingScrollId = null
+        }
+    }
+
+    fun addProvider(provider: ProviderSetting) {
+        // 搜索词可能把新提供商过滤掉
+        searchQuery = ""
+        pendingScrollId = provider.id.toString()
+        vm.updateSettings { latest ->
+            latest.copy(providers = listOf(provider) + latest.providers)
         }
     }
 
@@ -122,35 +154,15 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
-                    if(Locale.getDefault().language == "zh") {
-                        IconButton(
-                            onClick = {
-                                val aihubmixIndex = filteredProviders.indexOfFirst {
-                                    it.id.toString() == "1b1395ed-b702-4aeb-8bc1-b681c4456953"
-                                }
-                                if (aihubmixIndex != -1) {
-                                    scope.launch {
-                                        lazyListState.animateScrollToItem(aihubmixIndex)
-                                    }
-                                }
-                            }
-                        ) {
-                            AutoAIIcon("AiHubMix")
-                        }
+                    RecommendProviderButton { provider ->
+                        addProvider(provider.copyProvider(Uuid.random()))
                     }
                     ImportProviderButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(it.copyProvider(Uuid.random())) + settings.providers
-                            )
-                        )
+                        addProvider(it.copyProvider(Uuid.random()))
                     }
-                    AddButton {
-                        vm.updateSettings(
-                            settings.copy(
-                                providers = listOf(it) + settings.providers
-                            )
-                        )
+                    AddButton { provider ->
+                        addProvider(provider)
+                        navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -163,10 +175,10 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
             // Search bar
-            OutlinedTextField(
+            TextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
@@ -185,19 +197,24 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 },
                 singleLine = true,
                 shape = CircleShape,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceBright,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceBright,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
             )
 
 
-            LazyVerticalStaggeredGrid(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .imePadding(),
-                contentPadding = PaddingValues(16.dp),
-                verticalItemSpacing = 8.dp,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp) +
+                    PaddingValues(bottom = innerPadding.calculateBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 state = lazyListState,
-                columns = StaggeredGridCells.Fixed(2)
             ) {
                 items(filteredProviders, key = { it.id }) { provider ->
                     ReorderableItem(
@@ -206,35 +223,132 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     ) { isDragging ->
                         ProviderItem(
                             modifier = Modifier
-                                .scale(if (isDragging) 0.95f else 1f)
-                                .fillMaxWidth(),
+                                .fillMaxWidth()
+                                .then(longPressReorder(isDragging, enabled = searchQuery.isBlank())),
                             provider = provider,
-                            dragHandle = {
-                                val haptic = LocalHapticFeedback.current
-                                IconButton(
-                                    onClick = {},
-                                    modifier = Modifier
-                                        .longPressDraggableHandle(
-                                            onDragStarted = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            },
-                                            onDragStopped = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            }
-                                        )
-                                ) {
-                                    Icon(
-                                        imageVector = HugeIcons.DragDropHorizontal,
-                                        contentDescription = null
-                                    )
-                                }
-                            },
                             onClick = {
                                 navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
+                            },
+                            onDelete = {
+                                deleteTarget = provider
                             }
                         )
                     }
                 }
+            }
+        }
+    }
+
+    RikkaConfirmDialog(
+        show = deleteTarget != null,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            deleteTarget?.let { target ->
+                vm.updateSettings { latest -> latest.copy(providers = latest.providers.filter { it.id != target.id }) }
+            }
+            deleteTarget = null
+        },
+        onDismiss = { deleteTarget = null },
+    ) {
+        Text(stringResource(R.string.setting_provider_page_delete_dialog_text))
+    }
+}
+
+@Composable
+private fun RecommendProviderButton(
+    onAdd: (ProviderSetting) -> Unit
+) {
+    val toaster = LocalToaster.current
+    var showSheet by remember { mutableStateOf(false) }
+    val importSuccessMessage = stringResource(R.string.setting_provider_page_import_success)
+
+    IconButton(
+        onClick = { showSheet = true }
+    ) {
+        Icon(HugeIcons.Sparkles, contentDescription = stringResource(R.string.setting_provider_page_recommend))
+    }
+
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.setting_provider_page_recommend),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+                    RECOMMENDED_PROVIDERS.fastForEachIndexed { index, provider ->
+                        RecommendProviderItem(
+                            provider = provider,
+                            shape = cardGroupItemShape(index, RECOMMENDED_PROVIDERS.size),
+                            onAdd = {
+                                onAdd(provider)
+                                toaster.show(
+                                    importSuccessMessage,
+                                    type = ToastType.Success
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecommendProviderItem(
+    provider: ProviderSetting,
+    shape: Shape,
+    onAdd: () -> Unit
+) {
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AutoAIIcon(
+                name = provider.name,
+                modifier = Modifier.size(40.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = provider.name,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                    CompositionLocalProvider(LocalContentColor provides LocalContentColor.current.copy(alpha = 0.7f)) {
+                        provider.description()
+                    }
+                }
+            }
+            FilledTonalIconButton(onClick = onAdd) {
+                Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.setting_provider_page_add))
             }
         }
     }
@@ -247,9 +361,20 @@ private fun ImportProviderButton(
     val toaster = LocalToaster.current
     val context = LocalContext.current
     var showImportDialog by remember { mutableStateOf(false) }
+    var showScanner by remember { mutableStateOf(false) }
 
-    val scanQrCodeLauncher = rememberLauncherForActivityResult(ScanQRCode()) { result ->
-        handleQRResult(result, onAdd, toaster, context)
+    if (showScanner) {
+        QRCodeScannerDialog(
+            onResult = { content ->
+                showScanner = false
+                handleScannedQRCode(content, onAdd, toaster, context)
+            },
+            onPermissionDenied = {
+                showScanner = false
+                toaster.show(context.getString(R.string.setting_provider_page_no_permission), type = ToastType.Error)
+            },
+            onDismissRequest = { showScanner = false },
+        )
     }
 
     val pickImageLauncher = rememberLauncherForActivityResult(
@@ -295,7 +420,7 @@ private fun ImportProviderButton(
                         Button(
                             onClick = {
                                 showImportDialog = false
-                                scanQrCodeLauncher.launch(null)
+                                showScanner = true
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -371,41 +496,19 @@ private fun ImportProviderButton(
     }
 }
 
-private fun handleQRResult(
-    result: QRResult,
+private fun handleScannedQRCode(
+    content: String,
     onAdd: (ProviderSetting) -> Unit,
-    toaster: com.dokar.sonner.ToasterState,
+    toaster: me.rerere.ui.toast.ToasterState,
     context: android.content.Context
 ) {
     runCatching {
-        when (result) {
-            is QRResult.QRError -> {
-                toaster.show(
-                    context.getString(
-                        R.string.setting_provider_page_scan_error,
-                        result
-                    ), type = ToastType.Error
-                )
-            }
-
-            QRResult.QRMissingPermission -> {
-                toaster.show(
-                    context.getString(R.string.setting_provider_page_no_permission),
-                    type = ToastType.Error
-                )
-            }
-
-            is QRResult.QRSuccess -> {
-                val setting = decodeProviderSetting(result.content.rawValue ?: "")
-                onAdd(setting)
-                toaster.show(
-                    context.getString(R.string.setting_provider_page_import_success),
-                    type = ToastType.Success
-                )
-            }
-
-            QRResult.QRUserCanceled -> {}
-        }
+        val setting = decodeProviderSetting(content)
+        onAdd(setting)
+        toaster.show(
+            context.getString(R.string.setting_provider_page_import_success),
+            type = ToastType.Success
+        )
     }.onFailure { error ->
         toaster.show(
             context.getString(R.string.setting_provider_page_qr_decode_failed, error.message ?: ""),
@@ -417,7 +520,7 @@ private fun handleQRResult(
 private fun handleImageQRCode(
     uri: Uri,
     onAdd: (ProviderSetting) -> Unit,
-    toaster: com.dokar.sonner.ToasterState,
+    toaster: me.rerere.ui.toast.ToasterState,
     context: android.content.Context
 ) {
     runCatching {
@@ -447,66 +550,103 @@ private fun handleImageQRCode(
 }
 
 
+// 新建时只选类型，其余配置到详情页里填
 @Composable
 private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
-    val dialogState = useEditState<ProviderSetting> {
-        onAdd(it)
+    var showSheet by remember { mutableStateOf(false) }
+    val templates = remember {
+        listOf(
+            ProviderSetting.OpenAI(),
+            ProviderSetting.Google(),
+            ProviderSetting.Claude(),
+            ProviderSetting.ChatGPT(),
+            ProviderSetting.Grok(),
+        )
     }
 
     IconButton(
-        onClick = {
-            dialogState.open(ProviderSetting.OpenAI())
-        }
+        onClick = { showSheet = true }
     ) {
         Icon(HugeIcons.Add01, "Add")
     }
 
-    if (dialogState.isEditing) {
-        AlertDialog(
-            onDismissRequest = {
-                dialogState.dismiss()
-            },
-            title = {
-                Text(stringResource(R.string.setting_provider_page_add_provider))
-            },
-            text = {
-                dialogState.currentState?.let {
-                    ProviderConfigure(it) { newState ->
-                        dialogState.currentState = newState
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.setting_provider_page_add_provider),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+                    templates.fastForEachIndexed { index, template ->
+                        Surface(
+                            onClick = {
+                                showSheet = false
+                                onAdd(template.copyProvider(Uuid.random()))
+                            },
+                            shape = cardGroupItemShape(index, templates.size),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                val typeName = template.typeName()
+                                AutoAIIcon(
+                                    name = typeName,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Text(
+                                    text = typeName,
+                                    style = MaterialTheme.typography.titleMediumEmphasized,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                            }
+                        }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        dialogState.confirm()
-                    }
-                ) {
-                    Text(stringResource(R.string.setting_provider_page_add))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        dialogState.dismiss()
-                    }
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
+            }
+        }
     }
+}
+
+// 类型的显示名，和用户可改的 ProviderSetting.name 分开
+@Composable
+private fun ProviderSetting.typeName(): String = when (this) {
+    is ProviderSetting.OpenAI -> "OpenAI"
+    is ProviderSetting.Google -> "Google"
+    is ProviderSetting.Claude -> "Claude"
+    is ProviderSetting.ChatGPT -> stringResource(R.string.setting_provider_page_type_subscription, "ChatGPT")
+    is ProviderSetting.Grok -> stringResource(R.string.setting_provider_page_type_subscription, "Grok")
 }
 
 @Composable
 private fun ProviderItem(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
-    dragHandle: @Composable () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Card(
         modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (provider.enabled) {
                 CustomColors.listItemColors.containerColor
@@ -516,29 +656,23 @@ private fun ProviderItem(
             onClick()
         }
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AutoAIIcon(
-                    name = provider.name,
-                    modifier = Modifier.size(36.dp)
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                dragHandle()
-            }
+            AutoAIIcon(
+                name = provider.name,
+                modifier = Modifier.size(40.dp)
+            )
             Column(
-                modifier = Modifier,
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = provider.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 2,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 ProvideTextStyle(MaterialTheme.typography.labelSmall) {
@@ -568,6 +702,17 @@ private fun ProviderItem(
                     }
                 }
             }
+            ItemActionMenu(
+                actions = listOf(
+                    ItemAction(
+                        text = stringResource(R.string.delete),
+                        icon = HugeIcons.Delete01,
+                        destructive = true,
+                        enabled = !provider.builtIn,
+                        onClick = onDelete,
+                    ),
+                )
+            )
         }
     }
 }

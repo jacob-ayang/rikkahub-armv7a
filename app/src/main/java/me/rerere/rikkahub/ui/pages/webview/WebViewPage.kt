@@ -23,48 +23,59 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.webview.WebView
-import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
-import me.rerere.rikkahub.utils.base64Decode
+import me.rerere.ui.webview.WEB_VIEW_BASE_URL
+import me.rerere.ui.webview.WebView
+import me.rerere.ui.webview.WebViewContentCache
+import me.rerere.ui.webview.rememberWebViewState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WebViewPage(url: String, content: String) {
+fun WebViewPage(url: String, contentId: String) {
+    val context = LocalContext.current
     val state = if (url.isNotEmpty()) {
         rememberWebViewState(
             url = url,
             settings = {
                 builtInZoomControls = true
                 displayZoomControls = false
+                useWideViewPort = true
+                loadWithOverviewMode = true
             })
     } else {
+        val content = remember(contentId) {
+            WebViewContentCache.load(context.cacheDir, contentId).orEmpty()
+        }
         rememberWebViewState(
-            data = content.base64Decode(),
-            baseUrl = "https://rikkahub.local",
+            data = content,
+            baseUrl = WEB_VIEW_BASE_URL,
             mimeType = "text/html",
             settings = {
                 builtInZoomControls = true
                 displayZoomControls = false
+                useWideViewPort = true
+                loadWithOverviewMode = true
             }
         )
     }
 
     var showDropdown by remember { mutableStateOf(false) }
     var showConsoleSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
     BackHandler(state.canGoBack) {
         state.goBack()

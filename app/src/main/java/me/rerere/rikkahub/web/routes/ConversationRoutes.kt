@@ -10,19 +10,20 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.web.dto.ConversationDto
-import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
 import me.rerere.rikkahub.web.dto.ConversationNodeUpdateEvent
 import me.rerere.rikkahub.web.dto.ConversationSnapshotEvent
 import me.rerere.rikkahub.web.dto.EditMessageRequest
@@ -30,12 +31,15 @@ import me.rerere.rikkahub.web.dto.ErrorEvent
 import me.rerere.rikkahub.web.dto.ForkConversationRequest
 import me.rerere.rikkahub.web.dto.ForkConversationResponse
 import me.rerere.rikkahub.web.dto.MoveConversationRequest
+import me.rerere.rikkahub.web.dto.MoveConversationToFolderRequest
 import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
 import me.rerere.rikkahub.web.dto.SelectMessageNodeRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
 import me.rerere.rikkahub.web.dto.ToolApprovalRequest
 import me.rerere.rikkahub.web.dto.MessageSearchResultDto
+import me.rerere.rikkahub.web.dto.UpdateConversationConfigRequest
+import me.rerere.rikkahub.web.dto.UpdateConversationInjectionsRequest
 import me.rerere.rikkahub.web.dto.UpdateConversationTitleRequest
 import me.rerere.rikkahub.web.dto.toDto
 import me.rerere.rikkahub.web.dto.toListDto
@@ -46,12 +50,13 @@ import kotlin.uuid.Uuid
 fun Route.conversationRoutes(
     chatService: ChatService,
     conversationRepo: ConversationRepository,
+    folderRepo: FolderRepository,
     settingsStore: SettingsStore
 ) {
     route("/conversations") {
         // GET /api/conversations - List conversations of current assistant
         get {
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             val generationJobs = chatService.getConversationJobs().first()
             val conversations = conversationRepo
                 .getConversationsOfAssistant(settings.assistantId)
@@ -62,12 +67,14 @@ fun Route.conversationRoutes(
             call.respond(conversations)
         }
 
-        // GET /api/conversations/paged?offset=0&limit=20&query=foo - List conversations with pagination
+        // GET /api/conversations/paged?offset=0&limit=20&query=foo&folderId=none|<uuid>
+        // folderId: absent = all conversations, "none" = unfiled only, <uuid> = that folder
         get("/paged") {
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
             val query = call.request.queryParameters["query"]?.trim().orEmpty()
+            val folderParam = call.request.queryParameters["folderId"]?.trim()
 
             if (offset < 0) {
                 throw BadRequestException("offset must be >= 0")
@@ -76,16 +83,30 @@ fun Route.conversationRoutes(
                 throw BadRequestException("limit must be in 1..100")
             }
 
-            val page = if (query.isBlank()) {
-                conversationRepo.getConversationsOfAssistantPage(
+            val page = when {
+                // Search ignores folder filter (searches across all conversations of the assistant)
+                query.isNotBlank() -> conversationRepo.searchConversationsOfAssistantPage(
+                    assistantId = settings.assistantId,
+                    titleKeyword = query,
+                    offset = offset,
+                    limit = limit
+                )
+
+                folderParam == null -> conversationRepo.getConversationsOfAssistantPage(
                     assistantId = settings.assistantId,
                     offset = offset,
                     limit = limit
                 )
-            } else {
-                conversationRepo.searchConversationsOfAssistantPage(
-                    assistantId = settings.assistantId,
-                    titleKeyword = query,
+
+                folderParam.isEmpty() || folderParam == "none" ->
+                    conversationRepo.getUnfiledConversationsOfAssistantPage(
+                        assistantId = settings.assistantId,
+                        offset = offset,
+                        limit = limit
+                    )
+
+                else -> conversationRepo.getConversationsOfFolderPage(
+                    folderId = folderParam.toUuid("folderId"),
                     offset = offset,
                     limit = limit
                 )
@@ -122,44 +143,10 @@ fun Route.conversationRoutes(
             })
         }
 
-        // SSE /api/conversations/stream - Stream conversation list invalidation events
-        sse("/stream") {
-            heartbeat {
-                period = 15.seconds
-            }
-            settingsStore.settingsFlow
-                .map { it.assistantId }
-                .distinctUntilChanged()
-                .collectLatest { assistantId ->
-                    combine(
-                        conversationRepo.getConversationsOfAssistant(assistantId),
-                        chatService.getConversationJobs()
-                    ) { conversations, generationJobs ->
-                        // Include generation state in the list stream key so stop/start generation
-                        // can invalidate sidebar list even when conversation content isn't persisted.
-                        conversations.map { conversation ->
-                            Triple(
-                                conversation.id,
-                                conversation.updateAt.toEpochMilli(),
-                                generationJobs[conversation.id] != null
-                            )
-                        }
-                    }.distinctUntilChanged().collect {
-                        val json = JsonInstant.encodeToString(
-                            ConversationListInvalidateEvent(
-                                assistantId = assistantId.toString(),
-                                timestamp = System.currentTimeMillis()
-                            )
-                        )
-                        send(data = json, event = "invalidate")
-                    }
-                }
-        }
-
         // GET /api/conversations/{id} - Get single conversation
         get("/{id}") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
+            val conversation = chatService.getConversation(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
             val isGenerating = chatService.getGenerationJobStateFlow(uuid).first() != null
@@ -169,30 +156,25 @@ fun Route.conversationRoutes(
         // DELETE /api/conversations/{id} - Delete conversation
         delete("/{id}") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            conversationRepo.requireConversation(uuid)
 
-            conversationRepo.deleteConversation(conversation)
+            chatService.deleteConversation(uuid)
             call.respond(HttpStatusCode.NoContent)
         }
 
         // POST /api/conversations/{id}/pin - Toggle pinned status
         post("/{id}/pin") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
-
-            chatService.saveConversation(uuid, conversation.copy(isPinned = !conversation.isPinned))
+            chatService.toggleConversationPinned(uuid)
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 
         // POST /api/conversations/{id}/regenerate-title - Regenerate conversation title
         post("/{id}/regenerate-title") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            conversationRepo.requireConversation(uuid)
 
-            chatService.generateTitle(uuid, conversation, force = true)
+            chatService.generateTitle(uuid, force = true)
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 
@@ -206,11 +188,67 @@ fun Route.conversationRoutes(
                 throw BadRequestException("Title must not be blank")
             }
 
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            conversationRepo.requireConversation(uuid)
 
-            chatService.saveConversation(uuid, conversation.copy(title = title))
+            chatService.updateTitle(uuid, title)
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
+        }
+
+        // POST /api/conversations/{id}/injections - Update conversation-scoped prompt injections
+        post("/{id}/injections") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val request = call.receive<UpdateConversationInjectionsRequest>()
+            conversationRepo.requireConversation(uuid)
+
+            val (modeInjectionIds, lorebookIds) = validateConversationInjectionIds(
+                settings = settingsStore.awaitLoaded(),
+                modeInjectionIds = request.modeInjectionIds,
+                lorebookIds = request.lorebookIds,
+            )
+            // 已开始的会话自己持有注入绑定
+            chatService.updateChatAssistant(uuid) {
+                it.copy(modeInjectionIds = modeInjectionIds, lorebookIds = lorebookIds)
+            }
+
+            val isGenerating = chatService.getGenerationJobStateFlow(uuid).first() != null
+            call.respond(HttpStatusCode.OK, chatService.getConversationFlow(uuid).first().toDto(isGenerating))
+        }
+
+        // POST /api/conversations/{id}/config - Update the chat configuration held by the conversation
+        post("/{id}/config") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val request = call.receive<UpdateConversationConfigRequest>()
+            conversationRepo.requireConversation(uuid)
+
+            val settings = settingsStore.awaitLoaded()
+            val chatModelId = request.chatModelId?.toUuid("chatModelId")?.also { modelId ->
+                val model = settings.findModelById(modelId)
+                    ?: throw NotFoundException("Model not found")
+                if (model.type != ModelType.CHAT) {
+                    throw BadRequestException("chatModelId must be a chat model")
+                }
+            }
+            val mcpServers = request.mcpServerIds?.map { it.toUuid("mcpServerIds") }?.toSet()?.also { ids ->
+                if (!settings.mcpServers.map { it.id }.containsAll(ids)) {
+                    throw BadRequestException("mcpServerIds contains unknown server id")
+                }
+            }
+
+            if (chatModelId != null || request.reasoningLevel != null || mcpServers != null) {
+                chatService.updateChatAssistant(uuid) { assistant ->
+                    assistant.copy(
+                        chatModelId = chatModelId ?: assistant.chatModelId,
+                        reasoningLevel = request.reasoningLevel ?: assistant.reasoningLevel,
+                        mcpServers = mcpServers ?: assistant.mcpServers,
+                    )
+                }
+            }
+            if (request.enableWebSearch != null || request.builtInSearch != null) {
+                chatService.updateChatSearch(uuid, request.enableWebSearch, request.builtInSearch)
+            }
+
+            val isGenerating = chatService.getGenerationJobStateFlow(uuid).first() != null
+            call.respond(HttpStatusCode.OK, chatService.getConversationFlow(uuid).first().toDto(isGenerating))
         }
 
         // POST /api/conversations/{id}/move - Move conversation to another assistant
@@ -219,15 +257,33 @@ fun Route.conversationRoutes(
             val request = call.receive<MoveConversationRequest>()
             val targetAssistantId = request.assistantId.toUuid("assistant id")
 
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             if (settings.assistants.none { it.id == targetAssistantId }) {
                 throw BadRequestException("Assistant not found")
             }
 
+            chatService.moveConversationToAssistant(uuid, targetAssistantId)
+            call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
+        }
+
+        // POST /api/conversations/{id}/folder - Move conversation to a folder (null = unfiled)
+        post("/{id}/folder") {
+            val uuid = call.parameters["id"].toUuid("conversation id")
+            val request = call.receive<MoveConversationToFolderRequest>()
+
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
-            chatService.saveConversation(uuid, conversation.copy(assistantId = targetAssistantId))
+            val targetFolderId = request.folderId?.takeIf { it.isNotBlank() }?.toUuid("folder id")
+            if (targetFolderId != null) {
+                val folder = folderRepo.getFolderById(targetFolderId)
+                    ?: throw NotFoundException("Folder not found")
+                if (folder.assistantId != conversation.assistantId) {
+                    throw BadRequestException("Folder belongs to another assistant")
+                }
+            }
+
+            chatService.moveConversationToFolder(uuid, targetFolderId)
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 
@@ -235,8 +291,10 @@ fun Route.conversationRoutes(
         post("/{id}/messages") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<SendMessageRequest>()
+            val folderId = request.folderId?.takeIf { it.isNotBlank() }?.toUuid("folder id")
 
             chatService.initializeConversation(uuid)
+            if (folderId != null) chatService.updateDraftConversationFolder(uuid, folderId)
             chatService.sendMessage(uuid, request.parts, answer = true)
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
@@ -295,12 +353,13 @@ fun Route.conversationRoutes(
             val request = call.receive<RegenerateRequest>()
             val messageId = request.messageId.toUuid("message id")
 
-            val conversation = chatService.getConversationFlow(uuid).first()
-            val node = conversation.getMessageNodeByMessageId(messageId)
-            val message = node?.messages?.find { it.id == messageId }
-                ?: throw NotFoundException("Message not found")
+            val conversation = chatService.getConversation(uuid)
+                ?: throw NotFoundException("Conversation not found")
+            if (conversation.getMessageNodeByMessageId(messageId) == null) {
+                throw NotFoundException("Message not found")
+            }
 
-            chatService.regenerateAtMessage(uuid, message)
+            chatService.regenerateAtMessage(uuid, messageId)
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 
@@ -324,14 +383,13 @@ fun Route.conversationRoutes(
             val id = call.parameters["id"] ?: return@sse
             val uuid = runCatching { Uuid.parse(id) }.getOrNull() ?: return@sse
 
-            chatService.initializeConversation(uuid)
             chatService.addConversationReference(uuid)
-
-            heartbeat {
-                period = 1.seconds
-            }
-
             try {
+                chatService.initializeConversation(uuid)
+                heartbeat {
+                    period = 1.seconds
+                }
+
                 var sequence = 0L
                 var previousDto: ConversationDto? = null
 
@@ -411,4 +469,36 @@ fun Route.conversationRoutes(
 private sealed interface ConversationStreamPayload {
     data class Conversation(val value: ConversationDto) : ConversationStreamPayload
     data class BatchErrors(val messages: List<String>) : ConversationStreamPayload
+}
+
+private data class ConversationInjectionIds(
+    val modeInjectionIds: Set<Uuid>,
+    val lorebookIds: Set<Uuid>,
+)
+
+private fun validateConversationInjectionIds(
+    settings: me.rerere.rikkahub.data.datastore.Settings,
+    modeInjectionIds: List<String>,
+    lorebookIds: List<String>,
+): ConversationInjectionIds {
+    val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
+    val requestedModeInjectionIds = modeInjectionIds.map { it.toUuid("modeInjectionIds") }.toSet()
+    if (!validModeInjectionIds.containsAll(requestedModeInjectionIds)) {
+        throw BadRequestException("modeInjectionIds contains unknown injection id")
+    }
+
+    val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
+    val requestedLorebookIds = lorebookIds.map { it.toUuid("lorebookIds") }.toSet()
+    if (!validLorebookIds.containsAll(requestedLorebookIds)) {
+        throw BadRequestException("lorebookIds contains unknown lorebook id")
+    }
+
+    return ConversationInjectionIds(
+        modeInjectionIds = requestedModeInjectionIds,
+        lorebookIds = requestedLorebookIds,
+    )
+}
+
+private suspend fun ConversationRepository.requireConversation(id: Uuid) {
+    if (!existsConversationById(id)) throw NotFoundException("Conversation not found")
 }

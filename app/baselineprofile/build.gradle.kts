@@ -5,11 +5,15 @@ plugins {
 
 android {
     namespace = "me.rerere.baselineprofile"
-    compileSdk = 36
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     defaultConfig {
@@ -17,10 +21,15 @@ android {
         targetSdk = 36
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 允许在模拟器上生成 Baseline Profile（将 EMULATOR 错误降级为警告）
+        testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] = "EMULATOR"
+
+        // 两个渠道共用一份 profile（:app 里 mergeIntoMain），只对 github 渠道生成，不用在设备上跑两遍
+        missingDimensionStrategy("distribution", "github")
     }
 
     targetProjectPath = ":app"
-
 }
 
 // This is the configuration block for the Baseline Profile plugin.
@@ -30,10 +39,10 @@ baselineProfile {
 }
 
 dependencies {
-    implementation(libs.androidx.junit)
-    implementation(libs.androidx.espresso.core)
-    implementation(libs.androidx.uiautomator)
     implementation(libs.androidx.benchmark.macro.junit4)
+    implementation(libs.androidx.espresso.core)
+    implementation(libs.androidx.junit)
+    implementation(libs.androidx.uiautomator)
 }
 
 androidComponents {

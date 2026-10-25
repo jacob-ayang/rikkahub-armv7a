@@ -17,14 +17,21 @@ import okhttp3.internal.closeQuietly
 import okio.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
+import kotlin.reflect.KClass
 import kotlin.uuid.Uuid
+
+internal const val SEARCH_QUERY_DESCRIPTION =
+    "Concise search keywords, not a full sentence. Write them in the language the best sources on the topic " +
+        "are written in: usually English for technology, science and international topics; the local language " +
+        "for region-specific topics such as local news, policies, communities or products. " +
+        "Keep proper nouns, product names and error messages verbatim."
 
 interface SearchService<T : SearchServiceOptions> {
     val name: String
 
-    val parameters: InputSchema?
+    fun parameters(options: T): InputSchema?
 
-    val scrapingParameters: InputSchema?
+    fun scrapingParameters(options: T): InputSchema?
 
     @Composable
     fun Description()
@@ -48,6 +55,7 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.TavilyOptions -> TavilySearchService
                 is SearchServiceOptions.ExaOptions -> ExaSearchService
                 is SearchServiceOptions.ZhipuOptions -> ZhipuSearchService
+                is SearchServiceOptions.DoubaoOptions -> DoubaoSearchService
                 is SearchServiceOptions.BingLocalOptions -> BingSearchService
                 is SearchServiceOptions.SearXNGOptions -> SearXNGService
                 is SearchServiceOptions.LinkUpOptions -> LinkUpService
@@ -60,6 +68,10 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.BochaOptions -> BochaSearchService
                 is SearchServiceOptions.RikkaHubOptions -> RikkaHubSearchService
                 is SearchServiceOptions.GrokOptions -> GrokSearchService
+                is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
+                is SearchServiceOptions.SerperOptions -> SerperSearchService
+                is SearchServiceOptions.DeepSeekOptions -> DeepSeekSearchService
+                is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
             } as SearchService<T>
         }
 
@@ -97,18 +109,26 @@ data class SearchCommonOptions(
 data class SearchResult(
     val answer: String? = null,
     val items: List<SearchResultItem>,
+    val images: List<String> = emptyList(),
+    /** Local time at which this result was retrieved; not a publication date. */
+    val retrievedAt: String? = null,
 ) {
     @Serializable
     data class SearchResultItem(
         val title: String,
         val url: String,
         val text: String,
+        /** Provider-supplied publication date. Null means that no date was supplied. */
+        val publishedDate: String? = null,
+        val highlights: List<String> = emptyList(),
     )
 }
 
 @Serializable
 data class ScrapedResult(
     val urls: List<ScrapedResultUrl>,
+    /** Local time at which this result was retrieved; not a publication date. */
+    val retrievedAt: String? = null,
 )
 
 @Serializable
@@ -123,11 +143,16 @@ data class ScrapedResultMetadata(
     val title: String? = null,
     val description: String? = null,
     val language: String? = null,
+    /** Provider-supplied publication date. Null means that no date was supplied. */
+    val publishedDate: String? = null,
 )
 
 @Serializable
 sealed class SearchServiceOptions {
     abstract val id: Uuid
+
+    open val displayName: String
+        get() = TYPES[this::class] ?: "Unknown"
 
     companion object {
         val DEFAULT = BingLocalOptions()
@@ -136,6 +161,7 @@ sealed class SearchServiceOptions {
             BingLocalOptions::class to "Bing",
             RikkaHubOptions::class to "RikkaHub",
             ZhipuOptions::class to "智谱",
+            DoubaoOptions::class to "豆包",
             TavilyOptions::class to "Tavily",
             ExaOptions::class to "Exa",
             SearXNGOptions::class to "SearXNG",
@@ -148,12 +174,40 @@ sealed class SearchServiceOptions {
             JinaOptions::class to "Jina",
             BochaOptions::class to "博查",
             GrokOptions::class to "Grok",
+            TinyfishOptions::class to "Tinyfish",
+            SerperOptions::class to "Serper",
+            DeepSeekOptions::class to "DeepSeek",
+            CustomJsOptions::class to "Custom JS",
+        )
+
+        /** 新建各类型的默认配置，避免依赖 kotlin-reflect 调用构造函数 */
+        val FACTORIES: Map<KClass<out SearchServiceOptions>, () -> SearchServiceOptions> = mapOf(
+            BingLocalOptions::class to { BingLocalOptions() },
+            RikkaHubOptions::class to { RikkaHubOptions() },
+            ZhipuOptions::class to { ZhipuOptions() },
+            DoubaoOptions::class to { DoubaoOptions() },
+            TavilyOptions::class to { TavilyOptions() },
+            ExaOptions::class to { ExaOptions() },
+            SearXNGOptions::class to { SearXNGOptions() },
+            LinkUpOptions::class to { LinkUpOptions() },
+            BraveOptions::class to { BraveOptions() },
+            MetasoOptions::class to { MetasoOptions() },
+            OllamaOptions::class to { OllamaOptions() },
+            PerplexityOptions::class to { PerplexityOptions() },
+            FirecrawlOptions::class to { FirecrawlOptions() },
+            JinaOptions::class to { JinaOptions() },
+            BochaOptions::class to { BochaOptions() },
+            GrokOptions::class to { GrokOptions() },
+            TinyfishOptions::class to { TinyfishOptions() },
+            SerperOptions::class to { SerperOptions() },
+            DeepSeekOptions::class to { DeepSeekOptions() },
+            CustomJsOptions::class to { CustomJsOptions() },
         )
     }
 
     @Serializable
     @SerialName("bing_local")
-    class BingLocalOptions(
+    data class BingLocalOptions(
         override val id: Uuid = Uuid.random()
     ) : SearchServiceOptions()
 
@@ -165,11 +219,20 @@ sealed class SearchServiceOptions {
     ) : SearchServiceOptions()
 
     @Serializable
+    @SerialName("doubao")
+    data class DoubaoOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+        val mode: DoubaoSearchMode = DoubaoSearchMode.CUSTOM,
+    ) : SearchServiceOptions()
+
+    @Serializable
     @SerialName("tavily")
     data class TavilyOptions(
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
         val depth: String = "advanced",
+        val includeAnswer: Boolean = true,
     ) : SearchServiceOptions()
 
     @Serializable
@@ -269,6 +332,81 @@ sealed class SearchServiceOptions {
         val customUrl: String = "https://api.x.ai/v1/responses",
         val systemPrompt: String = "You are a helpful search assistant. Search the web to find accurate and up-to-date information for the user's query. Provide a comprehensive answer with citations.",
     ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("tinyfish")
+    data class TinyfishOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("serper")
+    data class SerperOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("deepseek")
+    data class DeepSeekOptions(
+        override val id: Uuid = Uuid.random(),
+        val apiKey: String = "",
+    ) : SearchServiceOptions()
+
+    @Serializable
+    @SerialName("custom_js")
+    data class CustomJsOptions(
+        override val id: Uuid = Uuid.random(),
+        val name: String = "",
+        val searchScript: String = DEFAULT_SEARCH_SCRIPT,
+        val scrapeScript: String = "",
+    ) : SearchServiceOptions() {
+        override val displayName: String
+            get() = name.ifBlank { "Custom JS" }
+        companion object {
+            const val DEFAULT_SCRAPE_SCRIPT = """// Implement scrape(urls) function
+// urls is an array of URL strings
+// Use fetch(url, options?) for HTTP requests
+// fetch() returns { status, ok, text(), json() }
+// Return { urls: [{ url, content, metadata?: { title?, description?, language? } }] }
+
+function scrape(urls) {
+  return {
+    urls: urls.map(function(url) {
+      const res = fetch(url);
+      const body = res.text();
+      return { url: url, content: body };
+    })
+  };
+}"""
+
+            const val DEFAULT_SEARCH_SCRIPT = """// Implement search(query, resultSize) function
+// Use fetch(url, options?) for HTTP requests
+// fetch() returns { status, ok, text(), json() }
+// Return { items: [{ title, url, text }], answer?: string }
+
+function search(query, resultSize) {
+  const encoded = encodeURIComponent(query);
+  const res = fetch("https://example.com/search?q=" + encoded + "&limit=" + resultSize);
+  const data = res.json();
+  return {
+    items: data.results.map(function(r) {
+      return { title: r.title, url: r.url, text: r.snippet };
+    })
+  };
+}"""
+        }
+    }
+}
+
+@Serializable
+enum class DoubaoSearchMode {
+    @SerialName("global")
+    GLOBAL,
+
+    @SerialName("custom")
+    CUSTOM,
 }
 
 internal suspend fun Call.await(): Response {

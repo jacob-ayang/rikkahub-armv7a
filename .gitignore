@@ -11,7 +11,14 @@ local.properties
 .cursor
 .history
 .kotlin
+
+# Local/CI build secrets and generated ARMv7a components
 *.keystore
-*.jks
-node_modules/
-package-lock.json
+app/google-services.json
+.native-build/
+native-build-info.json
+build-output/
+app/src/main/jniLibs/armeabi-v7a/
+workspace/src/main/jniLibs/armeabi-v7a/
+__pycache__/
+*.pyc

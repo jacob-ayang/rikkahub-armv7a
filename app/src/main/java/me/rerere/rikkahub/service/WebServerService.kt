@@ -14,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.WEB_SERVER_NOTIFICATION_CHANNEL_ID
@@ -47,7 +46,10 @@ class WebServerService : Service() {
             ACTION_START -> {
                 val port = intent.getIntExtra(EXTRA_PORT, 8080)
                 val localhostOnly = intent.getBooleanExtra(EXTRA_LOCALHOST_ONLY, false)
-                startForegroundCompat()
+                if (!startForegroundCompat()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 startObservingState()
                 webServerManager.start(port = port, localhostOnly = localhostOnly)
             }
@@ -61,10 +63,13 @@ class WebServerService : Service() {
             }
 
             null -> {
-                // START_STICKY 重启时 intent 为 null
-                startForegroundCompat()
+                // 兜底：intent 为 null 时根据设置决定是否启动
+                if (!startForegroundCompat()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 serviceScope.launch {
-                    val settings = settingsStore.settingsFlowRaw.first()
+                    val settings = settingsStore.awaitLoaded()
                     if (settings.webServerEnabled) {
                         startObservingState()
                         webServerManager.start(
@@ -77,7 +82,7 @@ class WebServerService : Service() {
                 }
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -85,16 +90,25 @@ class WebServerService : Service() {
         serviceScope.cancel()
     }
 
-    private fun startForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                buildStartingNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, buildStartingNotification())
+    private fun startForegroundCompat(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    buildStartingNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildStartingNotification())
+            }
+            true
+        } catch (e: Exception) {
+            // 部分 OEM ROM (如 realme UI/ColorOS) 会在系统侧拒绝 FGS 类型权限，
+            // 即使 Manifest 已声明 FOREGROUND_SERVICE_SPECIAL_USE 也会抛 SecurityException
+            Log.e(TAG, "Failed to start foreground service", e)
+            webServerManager.reportError("Failed to start foreground service: ${e.message}")
+            false
         }
     }
 
@@ -134,7 +148,7 @@ class WebServerService : Service() {
     )
 
     private fun buildStartingNotification() = NotificationCompat.Builder(this, WEB_SERVER_NOTIFICATION_CHANNEL_ID)
-        .setSmallIcon(R.drawable.small_icon)
+        .setSmallIcon(R.drawable.ic_stat_rikkahub)
         .setContentTitle(getString(R.string.notification_channel_web_server))
         .setContentText(getString(R.string.notification_web_server_starting))
         .setContentIntent(buildLaunchPendingIntent())
@@ -153,7 +167,7 @@ class WebServerService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, WEB_SERVER_NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.small_icon)
+            .setSmallIcon(R.drawable.ic_stat_rikkahub)
             .setContentTitle(getString(R.string.notification_web_server_running))
             .setContentText(url)
             .setContentIntent(buildLaunchPendingIntent())

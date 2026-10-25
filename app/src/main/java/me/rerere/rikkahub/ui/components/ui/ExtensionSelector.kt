@@ -1,32 +1,30 @@
 package me.rerere.rikkahub.ui.components.ui
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.SecondaryScrollableTabRow
-import androidx.compose.material3.Tab
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Book01
+import me.rerere.hugeicons.stroke.MagicWand01
+import me.rerere.hugeicons.stroke.Puzzle
+import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.files.SkillManager
-import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.skills.SkillManager
+import me.rerere.rikkahub.data.skills.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
@@ -34,6 +32,19 @@ import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import org.koin.compose.koinInject
+
+internal enum class ExtensionTab(
+    override val icon: ImageVector,
+    @param:StringRes private val labelRes: Int,
+) : PagerTab {
+    QUICK_MESSAGES(HugeIcons.Zap, R.string.extension_selector_tab_quick_messages),
+    MODE_INJECTIONS(HugeIcons.MagicWand01, R.string.extension_selector_tab_mode_injections),
+    LOREBOOKS(HugeIcons.Book01, R.string.extension_selector_tab_lorebooks),
+    SKILLS(HugeIcons.Puzzle, R.string.extension_selector_tab_skills);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
+}
 
 
 @Composable
@@ -50,52 +61,21 @@ fun ExtensionSelector(
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            skills = skillManager.listSkills()
-        }
+        // 打开扩展面板时清理运行时被删除的技能（残留的 enabledSkills 引用），
+        // prune 顺带返回现存技能列表，避免重复读盘
+        skills = skillManager.pruneOrphanedEnabledSkills()
     }
 
-    val pagerState = rememberPagerState { 4 }
-    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState { ExtensionTab.entries.size }
 
     Column(
         modifier = modifier
     ) {
-        SecondaryScrollableTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            containerColor = Color.Transparent,
-            modifier = Modifier.fillMaxWidth(),
-            edgePadding = 4.dp,
-        ) {
-            Tab(
-                selected = pagerState.currentPage == 0,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(0) }
-                },
-                text = { Text(stringResource(R.string.extension_selector_tab_quick_messages)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 1,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(1) }
-                },
-                text = { Text(stringResource(R.string.extension_selector_tab_mode_injections)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 2,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(2) }
-                },
-                text = { Text(stringResource(R.string.extension_selector_tab_lorebooks)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 3,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(3) }
-                },
-                text = { Text(stringResource(R.string.extension_selector_tab_skills)) }
-            )
-        }
+        PagerTabs(
+            pagerState = pagerState,
+            tabs = ExtensionTab.entries,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
 
         HorizontalPager(
             state = pagerState,
@@ -103,8 +83,9 @@ fun ExtensionSelector(
                 .fillMaxWidth()
                 .weight(1f)
         ) { page ->
-            when (page) {
-                0 -> {
+            val tab = ExtensionTab.entries[page]
+            when (tab) {
+                ExtensionTab.QUICK_MESSAGES -> {
                     if (settings.quickMessages.isNotEmpty()) {
                         QuickMessagesContent(
                             quickMessages = settings.quickMessages,
@@ -117,17 +98,19 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(quickMessageIds = newIds))
                             },
+                            onManage = onNavigateToQuickMessages,
                         )
                     } else {
                         ExtensionEmptyState(
                             message = stringResource(R.string.extension_selector_quick_messages_empty),
                             buttonText = stringResource(R.string.extension_selector_go_to_extensions),
                             onAction = onNavigateToQuickMessages,
+                            icon = tab.icon,
                         )
                     }
                 }
 
-                1 -> {
+                ExtensionTab.MODE_INJECTIONS -> {
                     if (settings.modeInjections.isNotEmpty()) {
                         ModeInjectionsContent(
                             modeInjections = settings.modeInjections,
@@ -140,15 +123,19 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(modeInjectionIds = newIds))
                             },
+                            onManage = onNavigateToPrompts,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_mode_injections_empty)
+                            message = stringResource(R.string.extension_selector_mode_injections_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToPrompts,
+                            icon = tab.icon,
                         )
                     }
                 }
 
-                2 -> {
+                ExtensionTab.LOREBOOKS -> {
                     if (settings.lorebooks.isNotEmpty()) {
                         LorebooksContent(
                             lorebooks = settings.lorebooks,
@@ -161,15 +148,19 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(lorebookIds = newIds))
                             },
+                            onManage = onNavigateToPrompts,
                         )
                     } else {
                         ExtensionEmptyState(
-                            message = stringResource(R.string.extension_selector_lorebooks_empty)
+                            message = stringResource(R.string.extension_selector_lorebooks_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToPrompts,
+                            icon = tab.icon,
                         )
                     }
                 }
 
-                3 -> {
+                ExtensionTab.SKILLS -> {
                     if (skills.isNotEmpty()) {
                         SkillsContent(
                             skills = skills,
@@ -182,12 +173,14 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(enabledSkills = newSkills))
                             },
+                            onManage = onNavigateToSkills,
                         )
                     } else {
                         ExtensionEmptyState(
                             message = stringResource(R.string.extension_selector_skills_empty),
                             buttonText = stringResource(R.string.extension_selector_go_to_skills),
                             onAction = onNavigateToSkills,
+                            icon = tab.icon,
                         )
                     }
                 }

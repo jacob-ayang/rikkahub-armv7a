@@ -22,4 +22,16 @@ data class ConversationEntity(
     val chatSuggestions: String,
     @ColumnInfo("is_pinned", defaultValue = "0")
     val isPinned: Boolean,
+    @ColumnInfo("custom_system_prompt", defaultValue = "")
+    val customSystemPrompt: String = "",
+    @ColumnInfo("mode_injection_ids", defaultValue = "[]")
+    val modeInjectionIds: String = "[]",
+    @ColumnInfo("lorebook_ids", defaultValue = "[]")
+    val lorebookIds: String = "[]",
+    @ColumnInfo("workspace_cwd", defaultValue = "")
+    val workspaceCwd: String = "",
+    @ColumnInfo("folder_id", defaultValue = "")
+    val folderId: String = "",
+    @ColumnInfo("config", defaultValue = "")
+    val config: String = "",
 )

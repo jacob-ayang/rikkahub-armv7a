@@ -12,32 +12,28 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.memoryId
+import me.rerere.rikkahub.service.ChatService
 
 class AssistantVM(
     private val settingsStore: SettingsStore,
     private val memoryRepository: MemoryRepository,
-    private val conversationRepo: ConversationRepository,
+    private val chatService: ChatService,
     private val filesManager: FilesManager,
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(fn: (Settings) -> Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.update(fn)
         }
     }
 
     fun addAssistant(assistant: Assistant) {
         viewModelScope.launch {
-            val settings = settings.value
-            settingsStore.update(
-                settings.copy(
-                    assistants = settings.assistants.plus(assistant)
-                )
-            )
+            settingsStore.update { it.copy(assistants = it.assistants.plus(assistant)) }
         }
     }
 
@@ -45,14 +41,11 @@ class AssistantVM(
         viewModelScope.launch {
             cleanupAssistantFiles(assistant)
 
-            val settings = settings.value
-            settingsStore.update(
-                settings.copy(
-                    assistants = settings.assistants.filter { it.id != assistant.id }
-                )
-            )
-            memoryRepository.deleteMemoriesOfAssistant(assistant.id.toString())
-            conversationRepo.deleteConversationOfAssistant(assistant.id)
+            settingsStore.update { settings ->
+                settings.copy(assistants = settings.assistants.filter { it.id != assistant.id })
+            }
+            memoryRepository.deleteFilesOfAssistant(assistant.id.toString())
+            chatService.deleteConversationsOfAssistant(assistant.id)
         }
     }
 
@@ -67,26 +60,22 @@ class AssistantVM(
         }
     }
 
-    fun copyAssistant(assistant: Assistant) {
+    fun copyAssistant(assistant: Assistant, copyMemories: Boolean = false) {
         viewModelScope.launch {
-            val settings = settings.value
             val copiedAssistant = assistant.copy(
                 id = kotlin.uuid.Uuid.random(),
                 name = "${assistant.name} (Clone)",
                 avatar = if(assistant.avatar is Avatar.Image) Avatar.Dummy else assistant.avatar,
             )
-            settingsStore.update(
-                settings.copy(
-                    assistants = settings.assistants.plus(copiedAssistant)
+            settingsStore.update { it.copy(assistants = it.assistants.plus(copiedAssistant)) }
+            if (copyMemories) {
+                memoryRepository.copyFiles(
+                    fromAssistantId = assistant.id.toString(),
+                    toAssistantId = copiedAssistant.id.toString(),
                 )
-            )
+            }
         }
     }
 
-    fun getMemories(assistant: Assistant) =
-        if (assistant.useGlobalMemory) {
-            memoryRepository.getGlobalMemoriesFlow()
-        } else {
-            memoryRepository.getMemoriesOfAssistantFlow(assistant.id.toString())
-        }
+    fun getMemories(assistant: Assistant) = memoryRepository.getFilesFlow(assistant.memoryId)
 }

@@ -11,16 +11,12 @@ class ModelDefinition(
     private val matcher: TokenMatcher,
     val inputModalities: Set<Modality>,
     val outputModalities: Set<Modality>,
-    val abilities: Set<ModelAbility>
+    val abilities: Set<ModelAbility>,
+    val contextLength: Int? = null
 ) : ModelSelector {
     override fun match(modelId: String): Boolean {
         val tokens = tokenize(modelId)
         return matcher.score(modelId, tokens) != null
-    }
-
-    fun matchScore(modelId: String): Int? {
-        val tokens = tokenize(modelId)
-        return matcher.score(modelId, tokens)
     }
 
     internal fun matchScore(modelId: String, tokens: List<String>): Int? =
@@ -46,6 +42,7 @@ class ModelDefinitionBuilder {
     private val inputModalities = mutableSetOf(Modality.TEXT)
     private val outputModalities = mutableSetOf(Modality.TEXT)
     private val abilities = mutableSetOf<ModelAbility>()
+    private var contextLength: Int? = null
 
     fun tokens(vararg specs: String) {
         matchers += TokenSequenceMatcher(specs.map(::parseTokenSpec))
@@ -81,6 +78,10 @@ class ModelDefinitionBuilder {
         this.abilities.addAll(abilities)
     }
 
+    fun contextLength(tokens: Int) {
+        contextLength = tokens
+    }
+
     fun build(): ModelDefinition {
         val matcher = when {
             matchers.isEmpty() -> MatchNone
@@ -91,7 +92,8 @@ class ModelDefinitionBuilder {
             matcher = matcher,
             inputModalities = inputModalities.toSet(),
             outputModalities = outputModalities.toSet(),
-            abilities = abilities.toSet()
+            abilities = abilities.toSet(),
+            contextLength = contextLength
         )
     }
 }
@@ -157,7 +159,8 @@ private class TokenSequenceMatcher(
     override fun score(modelId: String, tokens: List<String>): Int? {
         if (specs.isEmpty()) return null
         var specIndex = 0
-        for (token in tokens) {
+        for ((index, token) in tokens.withIndex()) {
+            if (isMagnitude(tokens, index)) continue
             if (specs[specIndex].matches(token)) {
                 specIndex += 1
                 if (specIndex == specs.size) return specs.size
@@ -187,7 +190,13 @@ private fun parseTokenSpec(spec: String): TokenSpec {
 
 private const val EXACT_ID_BONUS = 1000
 
-private fun tokenize(modelId: String): List<String> {
+// 紧跟这些单位的数字是参数量或上下文长度（如 8b、a3b、32k），不是版本号
+private val MAGNITUDE_SUFFIXES = setOf("b", "k")
+
+private fun isMagnitude(tokens: List<String>, index: Int): Boolean =
+    tokens[index].first().isDigit() && tokens.getOrNull(index + 1) in MAGNITUDE_SUFFIXES
+
+internal fun tokenize(modelId: String): List<String> {
     val tokens = mutableListOf<String>()
     val input = modelId.lowercase()
     var index = 0

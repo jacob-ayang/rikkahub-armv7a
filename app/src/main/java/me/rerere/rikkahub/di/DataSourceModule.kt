@@ -1,54 +1,55 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
-import android.util.Log
-import androidx.room.Room
-import androidx.room.RoomDatabase
-import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
-import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
-import io.requery.android.database.sqlite.SQLiteCustomExtension
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
+import me.rerere.mediagen.provider.MediaGenerationManager
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
+import me.rerere.rikkahub.data.ai.ConversationMetaGenerator
+import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
+import me.rerere.rikkahub.data.ai.MemoryConsolidator
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
+import me.rerere.rikkahub.data.ai.TranslationHandler
+import me.rerere.rikkahub.data.ai.UsageRecorder
+import me.rerere.rikkahub.data.ai.account.ProviderAccountManager
+import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
-import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
-import me.rerere.rikkahub.data.api.RikkaHubAPI
-import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.db.AppDatabaseFactory
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
-import me.rerere.rikkahub.data.db.fts.SimpleDictManager
-import me.rerere.rikkahub.data.db.migrations.Migration_6_7
-import me.rerere.rikkahub.data.db.migrations.Migration_11_12
-import me.rerere.rikkahub.data.db.migrations.Migration_13_14
-import me.rerere.rikkahub.data.db.migrations.Migration_14_15
-import me.rerere.rikkahub.data.db.migrations.Migration_15_16
-import me.rerere.rikkahub.data.ai.mcp.McpManager
-import me.rerere.rikkahub.data.sync.webdav.WebDavSync
-import me.rerere.search.SearchService
+import me.rerere.rikkahub.data.remote.ModelsDevUpdater
+import me.rerere.rikkahub.data.remote.RemoteFileStore
+import me.rerere.rikkahub.data.remote.RikkaHubAPI
+import me.rerere.rikkahub.data.remote.SettingsProxyAuthenticator
+import me.rerere.rikkahub.data.remote.SettingsProxySelector
+import me.rerere.rikkahub.data.remote.SettingsSocks5Authenticator
+import me.rerere.rikkahub.data.remote.SponsorAPI
+import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.S3Sync
+import me.rerere.rikkahub.data.sync.webdav.WebDavSync
+import me.rerere.rikkahub.service.memoryDreamKeepAlive
+import me.rerere.search.SearchService
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
-import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
-private const val DATA_SOURCE_TAG = "DataSourceModule"
-private const val SIMPLE_EXTENSION_FILE = "libsimple.so"
-private const val SIMPLE_TOKENIZER = "simple"
-private const val UNICODE_TOKENIZER = "unicode61 remove_diacritics 2"
+import java.util.concurrent.atomic.AtomicReference
 
 val dataSourceModule = module {
     single {
@@ -57,59 +58,7 @@ val dataSourceModule = module {
 
     single {
         val context: Context = get()
-        val simpleExtension = File(context.applicationInfo.nativeLibraryDir, SIMPLE_EXTENSION_FILE)
-        Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
-            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16)
-            .addCallback(object : RoomDatabase.Callback() {
-                override fun onOpen(db: SupportSQLiteDatabase) {
-                    var useSimpleTokenizer = simpleExtension.exists()
-                    if (useSimpleTokenizer) {
-                        try {
-                            val dictDir = SimpleDictManager.extractDict(context)
-                            val cursor = db.query("SELECT jieba_dict(?)", arrayOf(dictDir.absolutePath))
-                            cursor.use {
-                                if (it.moveToFirst()) {
-                                    val result = it.getString(0)
-                                    val success = result?.trimEnd('/') == dictDir.absolutePath.trimEnd('/')
-                                    if (!success) {
-                                        Log.e(
-                                            DATA_SOURCE_TAG,
-                                            "jieba_dict failed: $result, path=${dictDir.absolutePath}"
-                                        )
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.e(DATA_SOURCE_TAG, "Failed to initialize simple extension, fallback to unicode61", e)
-                            useSimpleTokenizer = false
-                        }
-                    } else {
-                        Log.w(DATA_SOURCE_TAG, "libsimple.so missing, fallback to unicode61 tokenizer")
-                    }
-                    db.ensureMessageFtsTokenizer(useSimpleTokenizer)
-                }
-            })
-            .openHelperFactory(
-                RequerySQLiteOpenHelperFactory(
-                    listOf(
-                        RequerySQLiteOpenHelperFactory.ConfigurationOptions { options ->
-                            if (simpleExtension.exists()) {
-                                options.customExtensions.add(
-                                    SQLiteCustomExtension(
-                                        simpleExtension.absolutePath,
-                                        null
-                                    )
-                                )
-                            } else {
-                                Log.w(DATA_SOURCE_TAG, "Skip loading SQLite extension because libsimple.so is missing")
-                            }
-                            options
-                        }
-                    )
-                )
-            )
-            .build()
+        AppDatabaseFactory.create(context)
     }
 
     single {
@@ -117,11 +66,17 @@ val dataSourceModule = module {
     }
 
     single {
-        PebbleEngine.Builder()
+        val engine = PebbleEngine.Builder()
             .loader(get<AssistantTemplateLoader>())
             .defaultLocale(Locale.getDefault())
             .autoEscaping(false)
             .build()
+        // 消息模板按助手 ID 缓存，内容取自设置，设置变了就让已编译的模板失效
+        val settingsStore = get<SettingsStore>()
+        get<AppScope>().launch {
+            settingsStore.settingsFlow.collect { engine.templateCache.invalidateAll() }
+        }
+        engine
     }
 
     single { TemplateTransformer(engine = get(), settingsStore = get()) }
@@ -132,6 +87,10 @@ val dataSourceModule = module {
 
     single {
         get<AppDatabase>().memoryDao()
+    }
+
+    single {
+        get<AppDatabase>().memoryConsolidationDao()
     }
 
     single {
@@ -151,26 +110,80 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().workspaceDao()
+    }
+
+    single {
+        get<AppDatabase>().folderDao()
+    }
+
+    single {
+        get<AppDatabase>().mediaCreationDao()
+    }
+
+    single {
+        get<AppDatabase>().translationHistoryDao()
+    }
+
+    single {
+        get<AppDatabase>().usageRecordDao()
+    }
+
+    single {
+        UsageRecorder(dao = get(), scope = get<AppScope>())
+    }
+
+    single {
         MessageFtsManager(get())
     }
 
     single { McpManager(settingsStore = get(), appScope = get(), filesManager = get()) }
 
     single {
-        GenerationHandler(
-            context = get(),
+        MemoryConsolidator(
             providerManager = get(),
-            json = get(),
-            memoryRepo = get(),
+            usageRecorder = get(),
+            memoryRepository = get(),
             conversationRepo = get(),
-            aiLoggingManager = get()
+            consolidationDao = get(),
+            settingsStore = get(),
         )
     }
 
+    single {
+        MemoryConsolidationScheduler(
+            scope = get<AppScope>(),
+            worker = get<MemoryConsolidator>(),
+            keepAlive = memoryDreamKeepAlive(get<Context>()),
+            isAppVisible = { ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) },
+        )
+    }
+
+    single {
+        TranslationHandler(providerManager = get(), usageRecorder = get())
+    }
+
+    single {
+        ConversationMetaGenerator(context = get(), providerManager = get(), usageRecorder = get())
+    }
+
     single<OkHttpClient> {
+        val settingsStore: SettingsStore = get()
         val acceptLang = AcceptLanguageBuilder.fromAndroid(get())
             .build()
-        OkHttpClient.Builder()
+        java.net.Authenticator.setDefault(SettingsSocks5Authenticator(settingsStore))
+        val initialNetworkSetting = settingsStore.settingsFlow.value.networkSetting
+        val appliedProxySetting = AtomicReference(
+            Triple(
+                initialNetworkSetting.proxyUrl,
+                initialNetworkSetting.proxyUsername,
+                initialNetworkSetting.proxyPassword,
+            )
+        )
+        lateinit var client: OkHttpClient
+        client = OkHttpClient.Builder()
+            .proxySelector(SettingsProxySelector(settingsStore))
+            .proxyAuthenticator(SettingsProxyAuthenticator(settingsStore))
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.MINUTES)
             .writeTimeout(120, TimeUnit.SECONDS)
@@ -178,12 +191,25 @@ val dataSourceModule = module {
             .followRedirects(true)
             .retryOnConnectionFailure(true)
             .addInterceptor { chain ->
+                val networkSetting = settingsStore.settingsFlow.value.networkSetting
+                val currentProxySetting = Triple(
+                    networkSetting.proxyUrl,
+                    networkSetting.proxyUsername,
+                    networkSetting.proxyPassword,
+                )
+                if (appliedProxySetting.getAndSet(currentProxySetting) != currentProxySetting) {
+                    client.connectionPool.evictAll()
+                }
+
                 val originalRequest = chain.request()
                 val requestBuilder = originalRequest.newBuilder()
                     .addHeader(HttpHeaders.AcceptLanguage, acceptLang)
 
                 if (originalRequest.header(HttpHeaders.UserAgent) == null) {
-                    requestBuilder.addHeader(HttpHeaders.UserAgent, "RikkaHub-Android/${BuildConfig.VERSION_NAME}")
+                    val userAgent = settingsStore.settingsFlow.value.networkSetting.userAgent
+                        .trim()
+                        .ifEmpty { "RikkaHub-Android/${BuildConfig.VERSION_NAME}" }
+                    requestBuilder.addHeader(HttpHeaders.UserAgent, userAgent)
                 }
 
                 chain.proceed(requestBuilder.build())
@@ -191,7 +217,11 @@ val dataSourceModule = module {
             .addNetworkInterceptor { chain ->
                 val request = chain.request()
                 val contentTypeHeader = request.header("Content-Type")
-                if (contentTypeHeader != null && contentTypeHeader.contains(";")) {
+                if (
+                    contentTypeHeader != null &&
+                    contentTypeHeader.contains(";") &&
+                    contentTypeHeader.substringBefore(";").trim().equals("application/json", ignoreCase = true)
+                ) {
                     chain.proceed(
                         request.newBuilder()
                             .header("Content-Type", contentTypeHeader.substringBefore(";").trim())
@@ -202,11 +232,13 @@ val dataSourceModule = module {
                 }
             }
             .addNetworkInterceptor(RequestLoggingInterceptor())
-            .addInterceptor(AIRequestInterceptor(remoteConfig = get()))
+            .addInterceptor(AIRequestInterceptor())
             .addInterceptor(HttpLoggingInterceptor().apply {
+                redactHeader("Proxy-Authorization")
                 level = HttpLoggingInterceptor.Level.HEADERS
             })
-            .build().also { SearchService.init(it, get()) }
+            .build()
+        client.also { SearchService.init(it, get()) }
     }
 
     single {
@@ -214,13 +246,26 @@ val dataSourceModule = module {
     }
 
     single {
-        ProviderManager(client = get(), context = get())
+        ModelsDevUpdater(context = get(), client = get())
     }
 
     single {
-        WebDavSync(
+        ProviderAccountManager(
             settingsStore = get(),
-            json = get(),
+            appScope = get(),
+            client = get(),
+        )
+    }
+
+    single {
+        ProviderManager(client = get(), context = get(), accountCredentials = get<ProviderAccountManager>())
+    }
+
+    single { BackupManager(context = get(), database = get(), settingsStore = get(), json = get()) }
+
+    single {
+        WebDavSync(
+            backupManager = get(),
             context = get(),
             httpClient = get()
         )
@@ -243,11 +288,22 @@ val dataSourceModule = module {
 
     single {
         S3Sync(
-            settingsStore = get(),
-            json = get(),
+            backupManager = get(),
             context = get(),
             httpClient = get()
         )
+    }
+
+    single {
+        RemoteFileStore(
+            settingsStore = get(),
+            httpClient = get(),
+            scope = get<AppScope>()
+        )
+    }
+
+    single {
+        MediaGenerationManager(client = get())
     }
 
     single<Retrofit> {
@@ -260,32 +316,4 @@ val dataSourceModule = module {
     single<RikkaHubAPI> {
         get<Retrofit>().create(RikkaHubAPI::class.java)
     }
-}
-
-private fun SupportSQLiteDatabase.ensureMessageFtsTokenizer(useSimpleTokenizer: Boolean) {
-    val tokenizer = if (useSimpleTokenizer) SIMPLE_TOKENIZER else UNICODE_TOKENIZER
-    val expectedTokenizeClause = "tokenize = '$tokenizer'"
-    val currentCreateSql = query("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_fts'").use { cursor ->
-        if (cursor.moveToFirst()) cursor.getString(0) else null
-    }
-
-    val hasExpectedTokenizer = currentCreateSql?.contains(expectedTokenizeClause, ignoreCase = true) == true
-    if (!hasExpectedTokenizer) {
-        execSQL("DROP TABLE IF EXISTS message_fts")
-        Log.i(DATA_SOURCE_TAG, "Recreate message_fts with tokenizer=$tokenizer")
-    }
-
-    execSQL(
-        """
-        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
-            text,
-            node_id UNINDEXED,
-            message_id UNINDEXED,
-            conversation_id UNINDEXED,
-            title UNINDEXED,
-            update_at UNINDEXED,
-            tokenize = '$tokenizer'
-        )
-        """.trimIndent()
-    )
 }
