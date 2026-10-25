@@ -21,6 +21,12 @@ def apply(root):
     ignore_file = root / ".gitignore"
     if ignores.strip() not in ignore_file.read_text():
         ignore_file.write_text(ignore_file.read_text().rstrip() + "\n" + ignores)
+    properties = root / "gradle.properties"
+    test_setting = "android.onlyEnableUnitTestForTheTestedBuildType=false"
+    if test_setting not in properties.read_text():
+        if "android.onlyEnableUnitTestForTheTestedBuildType=" in properties.read_text():
+            raise RuntimeError("Upstream unit-test variant policy changed")
+        properties.write_text(properties.read_text().rstrip() + "\n\n# Validate the signed release variant, too.\n" + test_setting + "\n")
     app = root / "app/build.gradle.kts"
     source = app.read_text()
     if 'create("armv7")' in source or 'create("universal")' in source:
