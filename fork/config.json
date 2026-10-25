@@ -8,8 +8,8 @@
     "published_at": "2026-10-24T12:03:22Z"
   },
   "device_validation": {
-    "approved": false,
-    "baseline_apk_sha256": ""
+    "approved": true,
+    "baseline_apk_sha256": "c62c8f5a4c07266492188965513362f402df9d4a7449b2085a86cd3b4c363ad4"
   },
   "previous_signed_release": "2.1.12",
   "ndk": "29.0.14206865",
