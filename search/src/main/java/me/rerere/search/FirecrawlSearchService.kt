@@ -42,12 +42,12 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.FirecrawlOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
-                    put("description", "Search query string")
+                    put("description", SEARCH_QUERY_DESCRIPTION)
                 })
                 put("sources", buildJsonObject {
                     put("type", "array")
@@ -70,8 +70,8 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun scrapingParameters(options: SearchServiceOptions.FirecrawlOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("url", buildJsonObject {
                     put("type", "string")
@@ -115,12 +115,16 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
                 .url("https://api.firecrawl.dev/v2/search")
                 .post(body.toString().toRequestBody())
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .apply {
+                    if (serviceOptions.apiKey.isNotBlank()) {
+                        addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                    }
+                }
                 .build()
 
             val response = httpClient.newCall(request).await()
             if (!response.isSuccessful) {
-                error("response failed #${'$'}{response.code}")
+                error("response failed #${response.code}")
             }
 
             val bodyString = response.body.string()
@@ -174,7 +178,11 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
                 .url("https://api.firecrawl.dev/v2/scrape")
                 .post(body.toString().toRequestBody())
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                .apply {
+                    if (serviceOptions.apiKey.isNotBlank()) {
+                        addHeader("Authorization", "Bearer ${serviceOptions.apiKey}")
+                    }
+                }
                 .build()
 
             val response = httpClient.newCall(request).await()

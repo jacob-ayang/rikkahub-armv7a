@@ -1,0 +1,14 @@
+// Native library modules must use the same toolchain/ABI as the application.
+subprojects {
+    plugins.withId('com.android.library') {
+        android {
+            ndkVersion = '29.0.14206865'
+            defaultConfig {
+                ndk {
+                    abiFilters.clear()
+                    abiFilters.add('armeabi-v7a')
+                }
+            }
+        }
+    }
+}

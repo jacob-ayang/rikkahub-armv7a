@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "upstream": "rikkahub/rikkahub",
+  "repository": "jacob-ayang/rikkahub-armv7a",
+  "branch": "master",
+  "release_baseline": {
+    "tag": "3.1.1",
+    "published_at": "2026-10-24T12:03:22Z"
+  },
+  "device_validation": {
+    "approved": false,
+    "baseline_apk_sha256": ""
+  },
+  "previous_signed_release": "2.1.12",
+  "ndk": "29.0.14206865",
+  "cmake": "3.22.1",
+  "sdk_platform": "android-37.2",
+  "build_tools": "37.0.0"
+}

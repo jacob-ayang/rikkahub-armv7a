@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,37 +15,46 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.currentWindowDpSize
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dokar.sonner.ToastType
+import me.rerere.ui.toast.ToastType
+import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
@@ -54,12 +64,18 @@ import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ai.FilesPicker
+import me.rerere.rikkahub.ui.components.ai.SearchMode
+import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
+import me.rerere.rikkahub.ui.components.ai.rememberChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
@@ -71,6 +87,7 @@ import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
 @Composable
@@ -89,11 +106,19 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
-    val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
+    val assistant by vm.assistant.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
+
+    // 新会话发出第一条消息前，跟随抽屉当前选中的文件夹（#2133）
+    val drawerVm: ChatDrawerVM = koinViewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
+    val selectedFolderId by drawerVm.selectedFolderId.collectAsStateWithLifecycle()
+    LaunchedEffect(selectedFolderId) {
+        vm.updateDraftFolder(selectedFolderId)
+    }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     // Handle back press when drawer is open
     BackHandler(enabled = drawerState.isOpen) {
@@ -102,9 +127,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
-    // Hide keyboard when drawer is open
+    // Clear input focus so popup transitions cannot reopen the keyboard.
     LaunchedEffect(drawerState.isOpen) {
         if (drawerState.isOpen) {
+            focusManager.clearFocus(force = true)
             softwareKeyboardController?.hide()
         }
     }
@@ -112,6 +138,16 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val windowAdaptiveInfo = currentWindowDpSize()
     val isBigScreen =
         windowAdaptiveInfo.width > windowAdaptiveInfo.height && windowAdaptiveInfo.width >= 1100.dp
+
+    // 进入大屏（永久抽屉）模式时重置抽屉状态为关闭，
+    // 避免从横屏旋转回竖屏后，模态抽屉残留为打开状态且无法关闭（#1304）
+    LaunchedEffect(isBigScreen) {
+        if (isBigScreen && drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+
+    val startVoiceMode = rememberVoiceModeStarter(vm, setting)
 
     val inputState = vm.inputState
 
@@ -144,18 +180,15 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
-    LaunchedEffect(vm) {
-        if (nodeId == null && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
-            chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
-            vm.chatListInitialized = true
-        }
-    }
-
     LaunchedEffect(nodeId, conversation.messageNodes.size) {
-        if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
-            val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
-            if (index >= 0) {
-                chatListState.scrollToItem(index)
+        if (!vm.chatListInitialized && conversation.messageNodes.isNotEmpty()) {
+            if (nodeId != null) {
+                val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
+                if (index >= 0) {
+                    chatListState.scrollToItem(index)
+                }
+            } else {
+                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
             }
             vm.chatListInitialized = true
         }
@@ -174,6 +207,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 }
             ) {
                 ChatPageContent(
+                    onStartVoiceMode = startVoiceMode,
                     inputState = inputState,
                     loadingJob = loadingJob,
                     processingStatus = processingStatus,
@@ -183,7 +217,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     navController = navController,
                     vm = vm,
                     chatListState = chatListState,
-                    enableWebSearch = enableWebSearch,
+                    assistant = assistant,
                     currentChatModel = currentChatModel,
                     bigScreen = true,
                     errors = errors,
@@ -206,6 +240,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                 }
             ) {
                 ChatPageContent(
+                    onStartVoiceMode = startVoiceMode,
                     inputState = inputState,
                     loadingJob = loadingJob,
                     processingStatus = processingStatus,
@@ -215,7 +250,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     navController = navController,
                     vm = vm,
                     chatListState = chatListState,
-                    enableWebSearch = enableWebSearch,
+                    assistant = assistant,
                     currentChatModel = currentChatModel,
                     bigScreen = false,
                     errors = errors,
@@ -232,6 +267,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
 
 @Composable
 private fun ChatPageContent(
+    onStartVoiceMode: () -> Unit,
     inputState: ChatInputState,
     loadingJob: Job?,
     processingStatus: String? = null,
@@ -242,7 +278,7 @@ private fun ChatPageContent(
     navController: Navigator,
     vm: ChatVM,
     chatListState: LazyListState,
-    enableWebSearch: Boolean,
+    assistant: Assistant,
     currentChatModel: Model?,
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
@@ -250,8 +286,30 @@ private fun ChatPageContent(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val workspaceRepository: WorkspaceRepository = koinInject()
+
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
+    var showFilesSheet by remember { mutableStateOf(false) }
+    val attachmentPickerActions = rememberChatAttachmentPickerActions(
+        inputState = inputState,
+        setting = setting,
+        onAttachmentAdded = { showFilesSheet = false },
+    )
+    val allowAudioVideoAttachments =
+        currentChatModel?.findProvider(setting.providers) is ProviderSetting.Google
+
+    val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
+        assistant.workspaceId?.let { workspaceId ->
+            listOf(
+                WorkspaceCompletionProvider(
+                    workspaceId = workspaceId.toString(),
+                    repository = workspaceRepository,
+                    currentCwd = conversation.workspaceCwd,
+                )
+            )
+        }.orEmpty()
+    }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
@@ -259,11 +317,13 @@ private fun ChatPageContent(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
     ) {
-        AssistantBackground(setting = setting)
+        AssistantBackground(setting = setting, modifier = Modifier.hazeSource(hazeState))
         Scaffold(
             topBar = {
                 TopBar(
                     settings = setting,
+                    assistant = assistant,
+                    chatModel = currentChatModel,
                     conversation = conversation,
                     bigScreen = bigScreen,
                     drawerState = drawerState,
@@ -280,19 +340,26 @@ private fun ChatPageContent(
                 )
             },
             bottomBar = {
+                val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
+                val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
                 ChatInput(
+                    onStartVoiceMode = onStartVoiceMode,
+                    voiceState = voiceState,
+                    onStopVoiceMode = vm.voiceSession::stop,
                     state = inputState,
+                    messageQueue = messageQueue,
+                    onRemoveQueuedMessage = vm::removeQueuedMessage,
+                    onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
+                    onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
+                    onResumeMessageQueue = vm::resumeMessageQueue,
                     loading = loadingJob != null,
                     settings = setting,
-                    conversation = conversation,
-                    mcpManager = vm.mcpManager,
+                    assistant = assistant,
+                    chatModel = currentChatModel,
                     hazeState = hazeState,
+                    completionProviders = completionProviders,
                     onCancelClick = {
                         vm.stopGeneration()
-                    },
-                    enableSearch = enableWebSearch,
-                    onToggleSearch = {
-                        vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
                     },
                     onSendClick = {
                         if (currentChatModel == null) {
@@ -307,6 +374,7 @@ private fun ChatPageContent(
                         } else {
                             vm.handleMessageSend(inputState.getContents())
                             scope.launch {
+                                delay(100.milliseconds)
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                             }
                         }
@@ -326,31 +394,10 @@ private fun ChatPageContent(
                         }
                         inputState.clearInput()
                     },
-                    onUpdateChatModel = {
-                        vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
-                    },
-                    onUpdateAssistant = {
-                        vm.updateSettings(
-                            setting.copy(
-                                assistants = setting.assistants.map { assistant ->
-                                    if (assistant.id == it.id) {
-                                        it
-                                    } else {
-                                        assistant
-                                    }
-                                }
-                            )
-                        )
-                    },
-                    onUpdateSearchService = { index ->
-                        vm.updateSettings(
-                            setting.copy(
-                                searchServiceSelected = index
-                            )
-                        )
-                    },
-                    onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
-                        vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+                    onUpdateChatModel = vm::setChatModel,
+                    onUpdateAssistant = vm::updateAssistant,
+                    onMoreClick = {
+                        showFilesSheet = true
                     },
                 )
             },
@@ -389,17 +436,7 @@ private fun ChatPageContent(
                     }
                 },
                 onUpdateMessage = { newNode ->
-                    vm.updateConversation(
-                        conversation.copy(
-                            messageNodes = conversation.messageNodes.map { node ->
-                                if (node.id == newNode.id) {
-                                    newNode
-                                } else {
-                                    node
-                                }
-                            }
-                        ))
-                    vm.saveConversationAsync()
+                    vm.selectMessageNode(newNode.id, newNode.selectIndex)
                 },
                 onClickSuggestion = { suggestion ->
                     inputState.editingMessage = null
@@ -414,7 +451,7 @@ private fun ChatPageContent(
                 onJumpToMessage = { index ->
                     previewMode = false
                     scope.launch {
-                        chatListState.animateScrollToItem(index)
+                        chatListState.requestScrollToItem(index)
                     }
                 },
                 onToolApproval = { toolCallId, approved, reason ->
@@ -426,14 +463,105 @@ private fun ChatPageContent(
                 onToggleFavorite = { node ->
                     vm.toggleMessageFavorite(node)
                 },
+                onConversationSystemPromptChange = { newPrompt ->
+                    vm.updateConversationSystemPrompt(newPrompt)
+                },
+            )
+        }
+
+        if (showFilesSheet) {
+            ChatFilesPickerSheet(
+                inputState = inputState,
+                setting = setting,
+                conversation = conversation,
+                assistant = assistant,
+                chatModel = currentChatModel,
+                vm = vm,
+                attachmentPickerActions = attachmentPickerActions,
+                onStartVoiceMode = onStartVoiceMode,
+                onDismiss = { showFilesSheet = false },
             )
         }
     }
 }
 
 @Composable
+private fun ChatFilesPickerSheet(
+    inputState: ChatInputState,
+    setting: Settings,
+    conversation: Conversation,
+    assistant: Assistant,
+    chatModel: Model?,
+    vm: ChatVM,
+    attachmentPickerActions: ChatAttachmentPickerActions,
+    onStartVoiceMode: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var showCompressDialog by remember { mutableStateOf(false) }
+
+    fun dismissAll() {
+        showCompressDialog = false
+        onDismiss()
+    }
+
+    val filesSheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+    )
+    ModalBottomSheet(
+        sheetState = filesSheetState,
+        onDismissRequest = { dismissAll() },
+    ) {
+        FilesPicker(
+            conversation = conversation,
+            state = inputState,
+            assistant = assistant,
+            chatModel = chatModel,
+            mcpManager = vm.mcpManager,
+            onCompressContext = vm::handleCompressContext,
+            onUpdateAssistant = vm::updateAssistant,
+            onUpdateWorkspaceCwd = vm::updateWorkspaceCwd,
+            onUpdateSearchMode = { mode ->
+                vm.updateSearch(
+                    enableWebSearch = mode == SearchMode.LOCAL,
+                    builtInSearch = mode == SearchMode.BUILT_IN,
+                )
+            },
+            onUpdateSearchService = { index ->
+                vm.updateSettings { it.copy(searchServiceSelected = index) }
+            },
+            showCompressDialog = showCompressDialog,
+            onShowCompressDialogChange = { showCompressDialog = it },
+            onDismiss = { dismissAll() },
+            onTakePic = attachmentPickerActions.onTakePicture,
+            onPickImage = attachmentPickerActions.onPickImage,
+            onPickVideo = attachmentPickerActions.onPickVideo,
+            onPickAudio = attachmentPickerActions.onPickAudio,
+            onPickFile = attachmentPickerActions.onPickFile,
+            onSketch = attachmentPickerActions.onSketch,
+            onStartVoiceMode = if (
+                setting.getSelectedASRProvider()?.supportsServerVadVoiceMode == true &&
+                voiceState.phase == VoicePhase.Off
+            ) {
+                {
+                    dismissAll()
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                    onStartVoiceMode()
+                }
+            } else null,
+        )
+    }
+}
+
+@Composable
 private fun TopBar(
     settings: Settings,
+    assistant: Assistant,
+    chatModel: Model?,
     conversation: Conversation,
     drawerState: DrawerState,
     bigScreen: Boolean,
@@ -474,18 +602,16 @@ private fun TopBar(
                 color = Color.Transparent,
             ) {
                 Column {
-                    val assistant = settings.getCurrentAssistant()
-                    val model = settings.getCurrentChatModel()
-                    val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
+                    val provider = chatModel?.findProvider(providers = settings.providers, checkOverwrite = false)
                     Text(
                         text = conversation.title.ifBlank { stringResource(R.string.chat_page_new_chat) },
                         maxLines = 1,
                         style = MaterialTheme.typography.bodyMedium,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (model != null && provider != null) {
+                    if (chatModel != null && provider != null) {
                         Text(
-                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${model.displayName} (${provider.name})",
+                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${chatModel.displayName} (${provider.name})",
                             overflow = TextOverflow.Ellipsis,
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.65f),

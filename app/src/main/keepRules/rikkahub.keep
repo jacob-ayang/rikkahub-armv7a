@@ -1,0 +1,46 @@
+# Release builds may shrink and optimize code, but must not rename symbols.
+-dontobfuscate
+
+# kotlinx.serialization looks up serializers of @Serializable classes reflectively at runtime.
+-keep @kotlinx.serialization.Serializable class * { *; }
+
+# Keep source locations so release stack traces retain useful line information.
+-keepattributes SourceFile,LineNumberTable
+
+# Exception class names show up in error messages and logs; keep them readable.
+-keepnames class * extends java.lang.Throwable
+
+# Ktor references JVM-only management APIs from its debug detector.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
+
+# SnakeYAML's JavaBean introspection references java.beans, which is unavailable on Android.
+-dontwarn java.beans.BeanInfo
+-dontwarn java.beans.FeatureDescriptor
+-dontwarn java.beans.IntrospectionException
+-dontwarn java.beans.Introspector
+-dontwarn java.beans.PropertyDescriptor
+
+# re2j has optional references that are unavailable on Android.
+-dontwarn com.google.re2j.**
+
+# Keep generic signatures and inner class info for libraries that read them reflectively at runtime.
+-keepattributes Signature,InnerClasses,EnclosingMethod
+
+# JLatexMath looks up \newcommand macros and the Greek/Cyrillic alphabet registrations by class name.
+-keep class org.scilab.forge.jlatexmath.NewCommandMacro {
+    <init>();
+    java.lang.String executeMacro(org.scilab.forge.jlatexmath.TeXParser, java.lang.String[]);
+}
+-keep class org.scilab.forge.jlatexmath.cyrillic.CyrillicRegistration { <init>(); }
+-keep class org.scilab.forge.jlatexmath.greek.GreekRegistration { <init>(); }
+
+# JSch loads its cipher, key exchange and compression implementations by class name from its config.
+-keep class com.jcraft.jsch.** { *; }
+
+# JSch's optional integrations (ssh-agent via JNA / junixsocket, logging bridges, GSSAPI) are unused on Android.
+-dontwarn com.sun.jna.**
+-dontwarn org.newsclub.net.unix.**
+-dontwarn org.slf4j.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn org.ietf.jgss.**

@@ -1,0 +1,28 @@
+// Applied after the upstream app configuration. Keep the upstream distribution flavors.
+plugins.withId('com.android.application') {
+    android {
+        defaultConfig {
+            ndk {
+                abiFilters.clear()
+                abiFilters.add('armeabi-v7a')
+            }
+        }
+        splits {
+            abi {
+                enable = false
+            }
+        }
+        ndkVersion = '29.0.14206865'
+        signingConfigs {
+            release {
+                def signing = new Properties()
+                def configFile = rootProject.file('local.properties')
+                if (configFile.exists()) {
+                    configFile.withInputStream { signing.load(it) }
+                    def keyPath = signing.getProperty('storeFile')
+                    if (keyPath != null) storeFile = rootProject.file(keyPath)
+                }
+            }
+        }
+    }
+}

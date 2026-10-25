@@ -23,6 +23,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/s
 import { useIsMobile } from "~/hooks/use-mobile";
 import { toConversationSummaryUpdate, useConversationList } from "~/hooks/use-conversation-list";
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
+import { useFolders } from "~/hooks/use-folders";
 import { useCurrentModel } from "~/hooks/use-current-model";
 import { getAssistantDisplayName, getModelDisplayName } from "~/lib/display";
 import { convertConversationToMarkdown, downloadMarkdown } from "~/lib/export-markdown";
@@ -420,12 +421,14 @@ function useDraftInputController({
   isHomeRoute,
   homeDraftId,
   setHomeDraftId,
+  folderId,
   navigate,
   refreshList,
 }: {
   activeId: string | null;
   isHomeRoute: boolean;
   homeDraftId: string;
+  folderId: string | null;
   setHomeDraftId: React.Dispatch<React.SetStateAction<string>>;
   navigate: ReturnType<typeof useNavigate>;
   refreshList: () => void;
@@ -483,12 +486,24 @@ function useDraftInputController({
     const conversationId = uuidv4();
     setHomeDraftId(createHomeDraftId());
 
-    await api.post<{ status: string }>(`conversations/${conversationId}/messages`, { parts });
+    await api.post<{ status: string }>(`conversations/${conversationId}/messages`, {
+      parts,
+      folderId,
+    });
     clearDraft(draftKey);
 
     navigate(`/c/${conversationId}`);
     refreshList();
-  }, [activeId, clearDraft, draftKey, getSubmitParts, navigate, refreshList, setHomeDraftId]);
+  }, [
+    activeId,
+    clearDraft,
+    draftKey,
+    folderId,
+    getSubmitParts,
+    navigate,
+    refreshList,
+    setHomeDraftId,
+  ]);
 
   const replaceDraft = React.useCallback(
     (text: string, parts: UIMessagePart[]) => {
@@ -524,142 +539,149 @@ function useDraftInputController({
   };
 }
 
-const ConversationTimeline = React.memo(({
-  activeId,
-  isHomeRoute,
-  detailLoading,
-  detailError,
-  selectedNodeMessages,
-  isGenerating,
-  settings,
-  conversationAssistantId,
-  contentClassName,
-  onEdit,
-  onDelete,
-  onFork,
-  onRegenerate,
-  onSelectBranch,
-  onToolApproval,
-}: {
-  activeId: string | null;
-  isHomeRoute: boolean;
-  detailLoading: boolean;
-  detailError: string | null;
-  selectedNodeMessages: SelectedNodeMessage[];
-  isGenerating: boolean;
-  settings: Settings | null;
-  conversationAssistantId: string | null;
-  contentClassName?: string;
-  onEdit: (message: MessageDto) => void | Promise<void>;
-  onDelete: (messageId: string) => Promise<void>;
-  onFork: (messageId: string) => Promise<void>;
-  onRegenerate: (messageId: string) => Promise<void>;
-  onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
-  onToolApproval: (toolCallId: string, approved: boolean, reason: string, answer?: string) => Promise<void>;
-}) => {
-  const { t } = useTranslation("page");
-  const canQuickJump =
-    Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
-  const assistant = React.useMemo(() => {
-    if (!settings || !conversationAssistantId) return null;
-    return settings.assistants.find((item) => item.id === conversationAssistantId) ?? null;
-  }, [conversationAssistantId, settings]);
-  const modelById = React.useMemo(() => {
-    const map = new Map<string, ProviderModel>();
-    if (!settings) return map;
+const ConversationTimeline = React.memo(
+  ({
+    activeId,
+    isHomeRoute,
+    detailLoading,
+    detailError,
+    selectedNodeMessages,
+    isGenerating,
+    settings,
+    conversationAssistantId,
+    contentClassName,
+    onEdit,
+    onDelete,
+    onFork,
+    onRegenerate,
+    onSelectBranch,
+    onToolApproval,
+  }: {
+    activeId: string | null;
+    isHomeRoute: boolean;
+    detailLoading: boolean;
+    detailError: string | null;
+    selectedNodeMessages: SelectedNodeMessage[];
+    isGenerating: boolean;
+    settings: Settings | null;
+    conversationAssistantId: string | null;
+    contentClassName?: string;
+    onEdit: (message: MessageDto) => void | Promise<void>;
+    onDelete: (messageId: string) => Promise<void>;
+    onFork: (messageId: string) => Promise<void>;
+    onRegenerate: (messageId: string) => Promise<void>;
+    onSelectBranch: (nodeId: string, selectIndex: number) => Promise<void>;
+    onToolApproval: (
+      toolCallId: string,
+      approved: boolean,
+      reason: string,
+      answer?: string,
+    ) => Promise<void>;
+  }) => {
+    const { t } = useTranslation("page");
+    const canQuickJump =
+      Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
+    const assistant = React.useMemo(() => {
+      if (!settings || !conversationAssistantId) return null;
+      return settings.assistants.find((item) => item.id === conversationAssistantId) ?? null;
+    }, [conversationAssistantId, settings]);
+    const modelById = React.useMemo(() => {
+      const map = new Map<string, ProviderModel>();
+      if (!settings) return map;
 
-    for (const provider of settings.providers) {
-      for (const model of provider.models) {
-        if (!map.has(model.id)) {
-          map.set(model.id, model);
+      for (const provider of settings.providers) {
+        for (const model of provider.models) {
+          if (!map.has(model.id)) {
+            map.set(model.id, model);
+          }
         }
       }
-    }
 
-    return map;
-  }, [settings]);
+      return map;
+    }, [settings]);
 
-  return (
-    <Conversation className="flex-1 min-h-0">
-      <ConversationContent
-        className={cn("mx-auto w-full max-w-3xl gap-4 px-4 py-6", contentClassName)}
-      >
-        {!activeId && !isHomeRoute && (
-          <ConversationEmptyState
-            icon={<MessageSquare className="size-10" />}
-            title={t("conversations.empty_state.select_title")}
-            description={t("conversations.empty_state.select_description")}
+    return (
+      <Conversation className="flex-1 min-h-0">
+        <ConversationContent
+          className={cn("mx-auto w-full max-w-3xl gap-4 px-4 py-6", contentClassName)}
+        >
+          {!activeId && !isHomeRoute && (
+            <ConversationEmptyState
+              icon={<MessageSquare className="size-10" />}
+              title={t("conversations.empty_state.select_title")}
+              description={t("conversations.empty_state.select_description")}
+            />
+          )}
+          {activeId && detailLoading && (
+            <ConversationEmptyState
+              title={t("conversations.empty_state.loading_title")}
+              description={t("conversations.empty_state.loading_description")}
+            />
+          )}
+          {activeId && detailError && (
+            <ConversationEmptyState
+              title={t("conversations.empty_state.error_title")}
+              description={detailError}
+            />
+          )}
+          {!detailLoading && !detailError && activeId && selectedNodeMessages.length === 0 && (
+            <ConversationEmptyState
+              icon={<MessageSquare className="size-10" />}
+              title={t("conversations.empty_state.no_message_title")}
+              description={t("conversations.empty_state.no_message_description")}
+            />
+          )}
+          {!detailLoading &&
+            !detailError &&
+            activeId &&
+            selectedNodeMessages.map(({ node, message }, index) => {
+              const model = message.modelId ? (modelById.get(message.modelId) ?? null) : null;
+
+              return (
+                <div
+                  key={message.id}
+                  id={getConversationMessageAnchorId(message.id)}
+                  className="scroll-mt-24"
+                >
+                  <ChatMessage
+                    node={node}
+                    message={message}
+                    loading={isGenerating && index === selectedNodeMessages.length - 1}
+                    isLastMessage={index === selectedNodeMessages.length - 1}
+                    assistant={assistant}
+                    model={model}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onFork={onFork}
+                    onRegenerate={onRegenerate}
+                    onSelectBranch={onSelectBranch}
+                    onToolApproval={onToolApproval}
+                  />
+                </div>
+              );
+            })}
+          {!detailLoading && !detailError && activeId && isGenerating && (
+            <div className="flex items-start py-2">
+              <TypingIndicator className="px-1 py-2" />
+            </div>
+          )}
+        </ConversationContent>
+
+        {canQuickJump ? (
+          <ConversationQuickJump
+            items={selectedNodeMessages.map(({ message }) => ({
+              id: message.id,
+              role: message.role,
+              preview: getQuickJumpPreview(message, t),
+            }))}
           />
-        )}
-        {activeId && detailLoading && (
-          <ConversationEmptyState
-            title={t("conversations.empty_state.loading_title")}
-            description={t("conversations.empty_state.loading_description")}
-          />
-        )}
-        {activeId && detailError && (
-          <ConversationEmptyState
-            title={t("conversations.empty_state.error_title")}
-            description={detailError}
-          />
-        )}
-        {!detailLoading && !detailError && activeId && selectedNodeMessages.length === 0 && (
-          <ConversationEmptyState
-            icon={<MessageSquare className="size-10" />}
-            title={t("conversations.empty_state.no_message_title")}
-            description={t("conversations.empty_state.no_message_description")}
-          />
-        )}
-        {!detailLoading &&
-          !detailError &&
-          activeId &&
-          selectedNodeMessages.map(({ node, message }, index) => {
-            const model = message.modelId ? (modelById.get(message.modelId) ?? null) : null;
+        ) : null}
 
-            return (
-              <div
-                key={message.id}
-                id={getConversationMessageAnchorId(message.id)}
-                className="scroll-mt-24"
-              >
-                <ChatMessage
-                  node={node}
-                  message={message}
-                  loading={isGenerating && index === selectedNodeMessages.length - 1}
-                  isLastMessage={index === selectedNodeMessages.length - 1}
-                  assistant={assistant}
-                  model={model}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onFork={onFork}
-                  onRegenerate={onRegenerate}
-                  onSelectBranch={onSelectBranch}
-                  onToolApproval={onToolApproval}
-                />
-              </div>
-            );
-          })}
-        {!detailLoading && !detailError && activeId && isGenerating && (
-          <div className="flex items-start py-2">
-            <TypingIndicator className="px-1 py-2" />
-          </div>
-        )}
-      </ConversationContent>
-
-      {canQuickJump ? (
-        <ConversationQuickJump
-          items={selectedNodeMessages.map(({ message }) => ({
-            id: message.id,
-            role: message.role,
-            preview: getQuickJumpPreview(message, t),
-          }))}
-        />
-      ) : null}
-
-      <ConversationScrollButton />
-    </Conversation>
-  );
-});
+        <ConversationScrollButton />
+      </Conversation>
+    );
+  },
+);
 
 export function meta() {
   return [
@@ -690,7 +712,15 @@ function ConversationsPageInner() {
   const { panel, closePanel } = useWorkbench();
 
   const { settings, assistants, currentAssistantId, currentAssistant } = useCurrentAssistant();
-  const { currentModel, currentProvider } = useCurrentModel();
+  const {
+    folders,
+    selectedFolderId,
+    setSelectedFolderId,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveConversationToFolder,
+  } = useFolders(currentAssistantId);
   const {
     conversations,
     activeId,
@@ -701,13 +731,19 @@ function ConversationsPageInner() {
     loadMore,
     refreshList,
     updateConversationSummary,
-  } = useConversationList({ currentAssistantId, routeId, autoSelectFirst: !isHomeRoute });
+  } = useConversationList({
+    currentAssistantId,
+    routeId,
+    autoSelectFirst: !isHomeRoute,
+    folderId: selectedFolderId,
+  });
 
   const [homeDraftId, setHomeDraftId] = React.useState(() => createHomeDraftId());
   const [editingSession, setEditingSession] = React.useState<EditingSession | null>(null);
 
   const { detail, detailLoading, detailError, selectedNodeMessages, resetDetail } =
     useConversationDetail(activeId, updateConversationSummary);
+  const { currentModel, currentProvider } = useCurrentModel(detail);
 
   const {
     draftKey,
@@ -725,6 +761,7 @@ function ConversationsPageInner() {
     isHomeRoute,
     homeDraftId,
     setHomeDraftId,
+    folderId: selectedFolderId,
     navigate,
     refreshList,
   });
@@ -940,6 +977,43 @@ function ConversationsPageInner() {
     [activeId, navigate, refreshList, resetDetail, routeId, setActiveId],
   );
 
+  const handleSelectFolder = React.useCallback(
+    (folderId: string | null) => {
+      setSelectedFolderId(folderId);
+    },
+    [setSelectedFolderId],
+  );
+
+  const handleCreateFolder = React.useCallback(
+    async (name: string) => {
+      await createFolder(name);
+    },
+    [createFolder],
+  );
+
+  const handleRenameFolder = React.useCallback(
+    async (id: string, name: string) => {
+      await renameFolder(id, name);
+    },
+    [renameFolder],
+  );
+
+  const handleDeleteFolder = React.useCallback(
+    async (id: string) => {
+      await deleteFolder(id);
+      refreshList();
+    },
+    [deleteFolder, refreshList],
+  );
+
+  const handleMoveConversationToFolder = React.useCallback(
+    async (conversationId: string, folderId: string | null) => {
+      await moveConversationToFolder(conversationId, folderId);
+      refreshList();
+    },
+    [moveConversationToFolder, refreshList],
+  );
+
   const handleCreateConversation = React.useCallback(() => {
     closePanel();
     setActiveId(null);
@@ -1002,7 +1076,7 @@ function ConversationsPageInner() {
           <div className="mb-4 text-center">
             <div className="mb-3 flex justify-center">
               <div className="[&>svg]:size-16">
-                <Logo className="size-16 text-primary"/>
+                <Logo className="size-16 text-primary" />
               </div>
             </div>
             <p className="text-lg text-muted-foreground">{t("conversations.welcome_prompt")}</p>
@@ -1011,6 +1085,7 @@ function ConversationsPageInner() {
         <ChatInput
           value={inputText}
           attachments={inputAttachments}
+          conversation={detail}
           ready={draftKey !== null}
           isGenerating={detail?.isGenerating ?? false}
           disabled={detailLoading || Boolean(detailError)}
@@ -1063,6 +1138,13 @@ function ConversationsPageInner() {
         onDelete={handleDeleteConversation}
         onCreateConversation={handleCreateConversation}
         webAuthEnabled={settings?.webServerJwtEnabled === true}
+        folders={folders}
+        selectedFolderId={selectedFolderId}
+        onSelectFolder={handleSelectFolder}
+        onCreateFolder={handleCreateFolder}
+        onRenameFolder={handleRenameFolder}
+        onDeleteFolder={handleDeleteFolder}
+        onMoveToFolder={handleMoveConversationToFolder}
       />
       <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
         <div className="flex items-center gap-2 border-b px-4 py-3">

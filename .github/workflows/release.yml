@@ -1,317 +1,237 @@
-name: Release Build
+name: ARMv7 Build and Release
 
 on:
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: "Git ref to build (branch, tag, or SHA)"
-        required: false
-        default: "master"
-        type: string
-      release_mode:
-        description: "Release mode"
-        required: true
-        default: "prerelease"
-        type: choice
-        options:
-          - prerelease
-          - release
       upstream_tag:
-        description: "Required when release_mode=release"
-        required: false
+        description: "Exact upstream official tag (empty synchronizes master only)"
         type: string
+        required: false
   workflow_call:
     inputs:
-      source_ref:
-        required: true
+      mode:
         type: string
-      release_mode:
         required: true
+      upstream_sha:
         type: string
+        required: true
       upstream_tag:
-        required: false
         type: string
+        required: false
+        default: ""
+      base_sha:
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: write
-  pull-requests: read
+  issues: write
+
+concurrency:
+  group: armv7-build-${{ inputs.upstream_tag || 'sync' }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
-    env:
-      INPUT_SOURCE_REF: ${{ inputs.source_ref }}
-      INPUT_RELEASE_MODE: ${{ inputs.release_mode }}
-      INPUT_UPSTREAM_TAG: ${{ inputs.upstream_tag }}
-
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      mode: ${{ steps.resolve.outputs.mode }}
+      sha: ${{ steps.resolve.outputs.sha }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      ready: ${{ steps.status.outputs.ready }}
     steps:
-      - name: Resolve and validate inputs
-        id: params
+      - uses: actions/checkout@v6
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+          REQUESTED_SHA: ${{ inputs.upstream_sha }}
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
         run: |
-          set -euo pipefail
+          python3 - <<'PYCODE'
+          import importlib.util, os
+          spec = importlib.util.spec_from_file_location('automation', 'scripts/ci/automation.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          tag = os.environ['REQUESTED_TAG']
+          mode = os.environ['REQUESTED_MODE'] or ('release' if tag else 'sync')
+          if mode not in ('sync', 'release') or (mode == 'release' and not tag):
+              raise ValueError('Release mode requires an upstream official tag')
+          upstream = module.GitHub(module.config()['upstream'])
+          if tag:
+              release = upstream.release(tag)
+              if not release or release['draft'] or release['prerelease']:
+                  raise ValueError('Only published official upstream releases are supported')
+          sha = upstream.sha(tag or module.config()['branch'])
+          expected = os.environ['REQUESTED_SHA']
+          if expected and (tag and sha != expected):
+              raise ValueError('Upstream tag moved since the controller resolved it')
+          # A daily sync builds the controller snapshot even if master moved since planning.
+          module.output('sha', expected or sha)
+          module.output('mode', mode)
+          module.output('tag', tag)
+          PYCODE
+      - id: status
+        if: steps.resolve.outputs.mode == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          UPSTREAM_SHA: ${{ steps.resolve.outputs.sha }}
+        run: python3 scripts/ci/automation.py status --tag "$TAG" --upstream-sha "$UPSTREAM_SHA"
 
-          SOURCE_REF="${INPUT_SOURCE_REF:-master}"
-          RELEASE_MODE="${INPUT_RELEASE_MODE:-prerelease}"
-          UPSTREAM_TAG="${INPUT_UPSTREAM_TAG:-}"
-
-          if [ "$RELEASE_MODE" != "prerelease" ] && [ "$RELEASE_MODE" != "release" ]; then
-            echo "ERROR: release_mode must be prerelease or release"
-            exit 1
-          fi
-
-          if [ "$RELEASE_MODE" = "release" ] && [ -z "$UPSTREAM_TAG" ]; then
-            echo "ERROR: upstream_tag is required when release_mode=release"
-            exit 1
-          fi
-
-          echo "source_ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
-          echo "release_mode=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
-          echo "upstream_tag=$UPSTREAM_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout code
-        uses: actions/checkout@v4
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.ready != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ steps.params.outputs.source_ref }}
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Test controller and overlay
+        run: python3 -m unittest discover -s scripts/ci/tests -v
+      - name: Prepare exact upstream snapshot with fork adaptations
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_SHA: ${{ needs.resolve.outputs.sha }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          args=(--target source --upstream-sha "$UPSTREAM_SHA" --tag "$TAG")
+          if [ -n "$BASE_SHA" ]; then args+=(--base-sha "$BASE_SHA"); fi
+          python3 scripts/ci/automation.py prepare "${args[@]}"
+      - uses: actions/setup-java@v5
         with:
-          distribution: "temurin"
-          java-version: "17"
-          cache: gradle
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+          distribution: temurin
+          java-version: '21'
+      - uses: pnpm/action-setup@v4
         with:
-          packages: >-
-            platform-tools
-            platforms;android-36
-            build-tools;36.0.0
-            ndk;27.0.11902837
-
-      - name: Validate required secrets
+          version: '11'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: source/web-ui/pnpm-lock.yaml
+      - name: Install frontend dependencies
+        working-directory: source/web-ui
+        run: pnpm install --frozen-lockfile
+      - uses: android-actions/setup-android@v3
+      - name: Install locked Android toolchain
+        working-directory: source
         run: |
-          set -euo pipefail
-
-          MISSING=0
-
-          if [ -z "${{ secrets.KEY_BASE64 }}" ]; then
-            echo "ERROR: Missing secret KEY_BASE64"
-            MISSING=1
-          fi
-          if [ -z "${{ secrets.SIGNING_CONFIG_B64 }}" ]; then
-            echo "ERROR: Missing secret SIGNING_CONFIG_B64"
-            MISSING=1
-          fi
-          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" ]; then
-            echo "ERROR: Missing secret GOOGLE_SERVICES_JSON_B64"
-            MISSING=1
-          fi
-
-          if [ "$MISSING" -ne 0 ]; then
-            exit 1
-          fi
-
-      - name: Prepare build secrets
+          python3 - <<'PYCODE'
+          import json, subprocess
+          cfg = json.load(open('fork/config.json'))
+          packages = ['platform-tools', 'platforms;' + cfg['sdk_platform'],
+                      'platforms;android-37.0', 'build-tools;' + cfg['build_tools'],
+                      'ndk;' + cfg['ndk'], 'cmake;' + cfg['cmake']]
+          subprocess.run(['sdkmanager', *packages], check=True)
+          PYCODE
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate and decode signing and Firebase configuration
+        working-directory: source
+        env:
+          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
+          SIGNING_CONFIG_B64: ${{ secrets.SIGNING_CONFIG_B64 }}
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: python3 scripts/ci/prepare-build-secrets.py
+      - name: Build checksum-locked ARMv7a native components
+        working-directory: source
+        run: python3 scripts/ci/build-native.py
+      - name: Build signed APK and run regression tests
+        working-directory: source
         run: |
-          set -euo pipefail
+          bash gradlew :app:assembleGithubRelease :app:testGithubReleaseUnitTest \
+            :workspace:testReleaseUnitTest :terminal:testReleaseUnitTest \
+            --stacktrace --max-workers=2 -Dorg.gradle.jvmargs=-Xmx4g
+      - name: Verify APK architecture, native dependencies and upgrade signature
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: python3 scripts/ci/verify-apk.py --tag "$TAG"
+      - name: Preserve verified release source commit
+        if: needs.resolve.outputs.mode == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/automation.py persist --target source
+      - name: Upload and verify draft release assets
+        if: needs.resolve.outputs.mode == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          UPSTREAM_SHA: ${{ needs.resolve.outputs.sha }}
+        run: python3 scripts/ci/automation.py upload --directory source/build-output --tag "$TAG" --upstream-sha "$UPSTREAM_SHA"
+      - name: Advance master after successful validation
+        if: needs.resolve.outputs.mode == 'sync'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ steps.source.outputs.base_sha }}
+        run: python3 scripts/ci/automation.py advance --target source --base-sha "$BASE_SHA"
+      - name: Save first-device test APK and provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: armv7a-${{ needs.resolve.outputs.mode }}-${{ needs.resolve.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            source/build-output/*
+            source/**/build/test-results/**/*.xml
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Remove decoded secrets
+        if: always()
+        run: rm -f source/rikkahub.keystore source/local.properties source/app/google-services.json
 
-          printf '%s' "${{ secrets.KEY_BASE64 }}" | base64 -d > rikkahub.keystore
-          printf '%s' "${{ secrets.SIGNING_CONFIG_B64 }}" | base64 -d > local.properties
-          printf '%s' "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" | base64 -d > app/google-services.json
-
-          if ! grep -q '^storeFile=' local.properties; then
-            echo 'storeFile=rikkahub.keystore' >> local.properties
-          fi
-
-          for key in storePassword keyAlias keyPassword; do
-            if ! grep -q "^${key}=" local.properties; then
-              echo "ERROR: local.properties is missing required key: $key"
-              exit 1
-            fi
-          done
-
-      - name: Extract build metadata
-        id: meta
+  publish:
+    needs: [resolve, build]
+    if: always() && needs.resolve.result == 'success' && needs.resolve.outputs.mode == 'release' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Publish only after first-device approval
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          UPSTREAM_SHA: ${{ needs.resolve.outputs.sha }}
+        run: python3 scripts/ci/automation.py publish --tag "$TAG" --upstream-sha "$UPSTREAM_SHA"
+      - name: Report validation state
+        env:
+          AWAITING_DEVICE: ${{ steps.publish.outputs.awaiting_device }}
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
-          set -euo pipefail
+          echo "Release tag: $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "Awaiting first-device validation: $AWAITING_DEVICE" >> "$GITHUB_STEP_SUMMARY"
 
-          VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)"
-          VERSION_CODE="$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts | head -1)"
-          SOURCE_SHA="$(git rev-parse HEAD)"
-          SHORT_SHA="$(git rev-parse --short=7 HEAD)"
-          BUILD_TIMESTAMP="$(date -u +'%Y%m%d%H%M')"
-
-          RELEASE_MODE="${{ steps.params.outputs.release_mode }}"
-          UPSTREAM_TAG="${{ steps.params.outputs.upstream_tag }}"
-
-          if [ "$RELEASE_MODE" = "release" ]; then
-            RELEASE_TAG="$UPSTREAM_TAG"
-            RELEASE_NAME="RikkaHub ${VERSION_NAME}"
-            IS_PRERELEASE="false"
+  report:
+    needs: [resolve, build, publish]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Report only completed stages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESOLVE: ${{ needs.resolve.result }}
+          BUILD: ${{ needs.build.result }}
+          PUBLISH: ${{ needs.publish.result }}
+          MODE: ${{ needs.resolve.outputs.mode }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          if [ "$RESOLVE" != success ]; then
+            python3 scripts/ci/automation.py report --stage resolution --result "$RESOLVE"
           else
-            RELEASE_TAG="${VERSION_NAME}-pre.${BUILD_TIMESTAMP}+${SHORT_SHA}"
-            RELEASE_NAME="RikkaHub ${VERSION_NAME} prerelease ${BUILD_TIMESTAMP}"
-            IS_PRERELEASE="true"
+            python3 scripts/ci/automation.py report --stage resolution --result success
           fi
-
-          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
-          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "build_timestamp=$BUILD_TIMESTAMP" >> "$GITHUB_OUTPUT"
-          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "release_name=$RELEASE_NAME" >> "$GITHUB_OUTPUT"
-          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-
-      - name: Verify libsimple native libraries
-        run: |
-          set -euo pipefail
-
-          REQUIRED_LIBS=(
-            "app/src/main/jniLibs/arm64-v8a/libsimple.so"
-            "app/src/main/jniLibs/x86_64/libsimple.so"
-            "app/src/main/jniLibs/armeabi-v7a/libsimple.so"
-          )
-
-          for so_path in "${REQUIRED_LIBS[@]}"; do
-            if [ ! -f "$so_path" ]; then
-              echo "ERROR: Missing required native library: $so_path"
-              exit 1
-            fi
-          done
-
-      - name: Verify ucrop dependency is reachable
-        id: ucrop_check
-        run: |
-          set -euo pipefail
-
-          URLS=(
-            "https://jitpack.io/com/github/yalantis/ucrop/2.2.11-native/ucrop-2.2.11-native.pom"
-            "https://jitpack.io/com/github/yalantis/ucrop/2.2.11-native/ucrop-2.2.11-native.aar"
-          )
-
-          STATUS="ok"
-          FAILED_URLS=()
-
-          for url in "${URLS[@]}"; do
-            if ! curl -fsSL -o /dev/null --retry 3 --retry-all-errors --retry-delay 2 "$url"; then
-              STATUS="warning"
-              FAILED_URLS+=("$url")
-              echo "::warning::External dependency probe failed: $url"
-            fi
-          done
-
-          FAILED_URLS_JOINED=""
-          if [ "${#FAILED_URLS[@]}" -gt 0 ]; then
-            FAILED_URLS_JOINED="$(printf '%s\n' "${FAILED_URLS[@]}" | paste -sd ',' -)"
-            {
-              echo "### Dependency Probe Warning"
-              echo ""
-              echo "The uCrop availability probe failed for:"
-              printf '%s\n' "${FAILED_URLS[@]}"
-              echo ""
-              echo "Continuing to Gradle resolution to distinguish probe false-positives from real dependency failures."
-            } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$BUILD" != skipped ]; then
+            python3 scripts/ci/automation.py report --stage "${MODE:-unknown}-build-${TAG:-master}" --result "$BUILD"
           fi
-
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          echo "failed_urls=$FAILED_URLS_JOINED" >> "$GITHUB_OUTPUT"
-
-      - name: Build ARMv7a and Universal APK
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          ./gradlew clean assembleArmv7Release assembleUniversalRelease --stacktrace
-
-      - name: Collect and rename APK artifacts
-        id: artifacts
-        run: |
-          set -euo pipefail
-
-          ARMV7_APK="$(find app/build/outputs/apk -type f \( -path '*/armv7/release/*.apk' -o -path '*/armv7Release/*.apk' -o -name '*armv7*release*.apk' \) | sort | head -1)"
-          UNIVERSAL_APK="$(find app/build/outputs/apk -type f \( -path '*/universal/release/*.apk' -o -path '*/universalRelease/*.apk' -o -name '*-universal-release*.apk' \) | sort | head -1)"
-
-          if [ -z "$ARMV7_APK" ] || [ -z "$UNIVERSAL_APK" ]; then
-            echo "ERROR: Expected armv7a and universal APK outputs were not found."
-            echo "Found APK files:"
-            find app/build/outputs/apk -type f -name '*.apk' || true
-            exit 1
+          if [ "$PUBLISH" != skipped ]; then
+            python3 scripts/ci/automation.py report --stage "publish-$TAG" --result "$PUBLISH"
           fi
-
-          mkdir -p build-output
-
-          VERSION_NAME="${{ steps.meta.outputs.version_name }}"
-          SHORT_SHA="${{ steps.meta.outputs.short_sha }}"
-
-          ARMV7_NAME="rikkahub-${VERSION_NAME}-armv7a-${SHORT_SHA}.apk"
-          UNIVERSAL_NAME="rikkahub-${VERSION_NAME}-universal-${SHORT_SHA}.apk"
-
-          cp "$ARMV7_APK" "build-output/$ARMV7_NAME"
-          cp "$UNIVERSAL_APK" "build-output/$UNIVERSAL_NAME"
-
-          echo "armv7_name=$ARMV7_NAME" >> "$GITHUB_OUTPUT"
-          echo "universal_name=$UNIVERSAL_NAME" >> "$GITHUB_OUTPUT"
-
-      - name: Verify armv7 APK contains libsimple.so
-        run: |
-          set -euo pipefail
-
-          ARMV7_APK="$(find app/build/outputs/apk -type f \( -path '*/armv7/release/*.apk' -o -path '*/armv7Release/*.apk' -o -name '*armv7*release*.apk' \) | sort | head -1)"
-          if [ -z "$ARMV7_APK" ]; then
-            echo "ERROR: armv7 APK not found for native library check."
-            exit 1
-          fi
-
-          if ! unzip -l "$ARMV7_APK" | grep -q "lib/armeabi-v7a/libsimple.so"; then
-            echo "ERROR: armv7 APK is missing lib/armeabi-v7a/libsimple.so"
-            echo "Detected armv7 native entries:"
-            unzip -l "$ARMV7_APK" | grep "lib/armeabi-v7a/" || true
-            exit 1
-          fi
-
-      - name: Create or update GitHub release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ steps.meta.outputs.release_tag }}
-          name: ${{ steps.meta.outputs.release_name }}
-          commit: ${{ steps.meta.outputs.source_sha }}
-          prerelease: ${{ steps.meta.outputs.is_prerelease == 'true' }}
-          allowUpdates: true
-          replacesArtifacts: true
-          artifactErrorsFailBuild: true
-          artifacts: build-output/*.apk
-          body: |
-            ## Build Information
-            - Version: `${{ steps.meta.outputs.version_name }}` (`${{ steps.meta.outputs.version_code }}`)
-            - Source Ref: `${{ steps.params.outputs.source_ref }}`
-            - Commit: `${{ steps.meta.outputs.source_sha }}`
-            - Mode: `${{ steps.params.outputs.release_mode }}`
-            - Upstream Tag: `${{ steps.params.outputs.upstream_tag }}`
-
-            ## APK Files
-            - `${{ steps.artifacts.outputs.armv7_name }}` (ARMv7a)
-            - `${{ steps.artifacts.outputs.universal_name }}` (Universal)
-
-      - name: Publish summary
-        if: always()
-        run: |
-          {
-            echo "## Release Build Summary"
-            echo ""
-            echo "| Item | Value |"
-            echo "|---|---|"
-            echo "| Status | ${{ job.status }} |"
-            echo "| Source Ref | \`${{ steps.params.outputs.source_ref }}\` |"
-            echo "| Mode | \`${{ steps.params.outputs.release_mode }}\` |"
-            echo "| Tag | \`${{ steps.meta.outputs.release_tag }}\` |"
-            echo "| uCrop Probe | \`${{ steps.ucrop_check.outputs.status }}\` |"
-            echo "| ARMv7a APK | \`${{ steps.artifacts.outputs.armv7_name }}\` |"
-            echo "| Universal APK | \`${{ steps.artifacts.outputs.universal_name }}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Cleanup sensitive files
-        if: always()
-        run: |
-          rm -f local.properties rikkahub.keystore app/google-services.json

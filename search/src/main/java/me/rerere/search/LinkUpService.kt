@@ -39,19 +39,19 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
         }
     }
 
-    override val parameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun parameters(options: SearchServiceOptions.LinkUpOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
-                    put("description", "search keyword")
+                    put("description", SEARCH_QUERY_DESCRIPTION)
                 })
             },
             required = listOf("query")
         )
 
-    override val scrapingParameters: InputSchema?
-        get() = InputSchema.Obj(
+    override fun scrapingParameters(options: SearchServiceOptions.LinkUpOptions): InputSchema? =
+        InputSchema.Obj(
             properties = buildJsonObject {
                 put("url", buildJsonObject {
                     put("type", "string")

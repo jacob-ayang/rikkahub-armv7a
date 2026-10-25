@@ -6,11 +6,15 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.insert
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 
 @Composable
 operator fun PaddingValues.plus(other: PaddingValues): PaddingValues {
@@ -24,6 +28,11 @@ operator fun PaddingValues.plus(other: PaddingValues): PaddingValues {
         bottom = this.calculateBottomPadding() + other.calculateBottomPadding()
     )
 }
+
+// 用于未开启 autoMirror、但在当前语境下有方向含义的图标
+@Composable
+fun Modifier.mirrorForRtl(): Modifier =
+    if (LocalLayoutDirection.current == LayoutDirection.Rtl) scale(scaleX = -1f, scaleY = 1f) else this
 
 fun Color.toCssHex(): String {
     val alpha = (alpha * 255).toInt()
@@ -40,7 +49,8 @@ fun Dp.toSp(): TextUnit = with(LocalDensity.current) {
 
 @Composable
 fun TextUnit.toDp(): Dp = with(LocalDensity.current) {
-    this@toDp.toDp()
+    // Density.toDp(TextUnit) 仅支持 Sp 单位，Em/Unspecified 会抛 "Only Sp can convert to Px"
+    if (this@toDp.isSp) this@toDp.toDp() else 0.dp
 }
 
 fun TextFieldState.insertAtCursor(text: String) {

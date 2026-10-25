@@ -1,0 +1,18 @@
+{
+  "simple": {
+    "url": "https://codeload.github.com/wangfenjin/simple/tar.gz/ea854b0a727e9f15f4878ad0ae9f1b738a92afe4",
+    "sha256": "a5a63d9bdd079c9a2a6555a9f13cabbf236e6141857246f8d44cd91a450c63ed"
+  },
+  "proot": {
+    "url": "https://codeload.github.com/termux/proot/tar.gz/b27d81a68d765f3462e807f4a14e01a03f8e89ea",
+    "sha256": "51af063ff92ed2d18a9011bee4cd1fb9483eea41f68d8a69068725afcca7b32a"
+  },
+  "talloc": {
+    "url": "https://www.samba.org/ftp/talloc/talloc-2.4.3.tar.gz",
+    "sha256": "dc46c40b9f46bb34dd97fe41f548b0e8b247b77a918576733c528e83abd854dd"
+  },
+  "android-shmem": {
+    "url": "https://codeload.github.com/termux/libandroid-shmem/tar.gz/7f0bd7e25dbdd146265aff7c6a890029e374622d",
+    "sha256": "48e80a854df55dd8eb2a5026cb3cc90a10165aae68c591acdabad24488ce621f"
+  }
+}
