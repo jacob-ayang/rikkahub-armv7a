@@ -86,6 +86,35 @@ class ReleasePlanningTest(unittest.TestCase):
         self.assertEqual(self.run_plan(state)["sync"], "true")
 
 
+class ReleaseLookupTest(unittest.TestCase):
+    def test_pending_draft_is_found_when_tag_endpoint_returns_404(self):
+        api = automation.GitHub()
+        draft = dict(id=42, tag_name="3.1.1", draft=True)
+        with patch.object(api, "request", side_effect=[None, draft]) as request, \
+                patch.object(api, "pages", return_value=[draft]):
+            self.assertEqual(api.release("3.1.1"), draft)
+            self.assertEqual(request.call_args.args, ("releases/42",))
+
+    def test_duplicate_pending_tags_fail_before_mutating_assets(self):
+        api = automation.GitHub()
+        with patch.object(api, "request", return_value=None), patch.object(api, "pages", return_value=[
+            dict(id=1, tag_name="3.1.1", draft=True), dict(id=2, tag_name="3.1.1", draft=True),
+        ]):
+            with self.assertRaisesRegex(RuntimeError, "Multiple drafts"):
+                api.release("3.1.1")
+
+
+class GitHubRequestTest(unittest.TestCase):
+    def test_only_get_404_means_missing_resource(self):
+        import urllib.error
+        error = urllib.error.HTTPError("https://api.github.com/test", 404, "Not Found", {}, None)
+        api = automation.GitHub()
+        with patch.object(automation.urllib.request, "urlopen", side_effect=error):
+            self.assertIsNone(api.request("releases/tags/missing"))
+            with self.assertRaisesRegex(RuntimeError, "POST.*404"):
+                api.request("releases", "POST", dict(tag_name="3.1.1"))
+
+
 class ManifestTest(unittest.TestCase):
     def setUp(self):
         self.manifest = dict(tag="3.1.1", upstream_sha="a" * 40, apk="test.apk", apk_size=10,
@@ -130,6 +159,13 @@ class ManifestTest(unittest.TestCase):
         with patch.object(automation, "asset_bytes", side_effect=self.data):
             self.assertIsNone(automation.release_manifest(None, self.release, "a" * 40))
 
+    def test_drafts_must_use_sources_without_workflows(self):
+        self.release["draft"] = True
+        with patch.object(automation, "asset_bytes", side_effect=self.data):
+            self.assertIsNone(automation.release_manifest(None, self.release, "a" * 40))
+            self.manifest["release_workflows_omitted"] = True
+            self.assertIsNotNone(automation.release_manifest(None, self.release, "a" * 40))
+
 
 class GitSafetyTest(unittest.TestCase):
     def test_master_race_prevents_push(self):
@@ -147,6 +183,16 @@ class GitSafetyTest(unittest.TestCase):
 
 
 class OverlayTest(unittest.TestCase):
+    def test_release_source_has_no_workflows_but_keeps_other_github_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / ".github/workflows/release.yml").write_text("controller")
+            (root / ".github/FUNDING.yml").write_text("funding")
+            automation.strip_release_workflows(root)
+            self.assertFalse((root / ".github/workflows").exists())
+            self.assertTrue((root / ".github/FUNDING.yml").exists())
+
     def test_rootfs_version_follows_upstream_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as temporary:
             file = Path(temporary) / "page.kt"

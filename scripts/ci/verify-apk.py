@@ -104,6 +104,9 @@ def main():
         if version_code <= old_code:
             raise RuntimeError("versionCode must increase from the previous signed release")
     state = json.loads((ROOT / ".fork-state.json").read_text())
+    workflows_omitted = not (ROOT / ".github/workflows").exists()
+    if args.tag and not workflows_omitted:
+        raise RuntimeError("Release source snapshots must omit workflow definitions")
     sha = run("git", "rev-parse", "HEAD")
     output = ROOT / args.output
     output.mkdir(exist_ok=True)
@@ -111,6 +114,7 @@ def main():
     shutil.copyfile(apk, output / name)
     apk_hash = hashlib.sha256(apk.read_bytes()).hexdigest()
     manifest = {"schema": 1, "tag": args.tag, "version_name": version_name, "version_code": version_code,
+                "release_workflows_omitted": workflows_omitted,
                 "min_sdk": min_sdk, "abi": "armeabi-v7a", "upstream_sha": state["upstream_sha"],
                 "source_sha": sha, "control_sha": state["control_sha"], "overlay_sha256": state["overlay_sha256"],
                 "build_overlay_sha256": state["build_overlay_sha256"],

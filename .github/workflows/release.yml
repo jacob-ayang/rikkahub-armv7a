@@ -34,8 +34,7 @@ permissions:
 
 concurrency:
   group: armv7-build-${{ inputs.upstream_tag || 'sync' }}
-  # Superseded bootstrap builds may be cancelled; production releases stay serialized.
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -133,6 +132,8 @@ jobs:
         working-directory: source
         run: python3 scripts/ci/setup-android.py
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Validate and decode signing and Firebase configuration
         working-directory: source
         env:
@@ -148,7 +149,7 @@ jobs:
         run: |
           bash gradlew :app:assembleGithubRelease :app:testGithubReleaseUnitTest \
             :workspace:testReleaseUnitTest :terminal:testReleaseUnitTest \
-            --stacktrace --max-workers=2 -Dorg.gradle.jvmargs=-Xmx4g
+            --stacktrace --build-cache --max-workers=2 -Dorg.gradle.jvmargs=-Xmx4g
       - name: Verify APK architecture, native dependencies and upgrade signature
         working-directory: source
         env:

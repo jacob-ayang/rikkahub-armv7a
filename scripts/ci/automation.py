@@ -18,7 +18,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNED = (".github", "fork", "scripts/ci", "docs/CI_CD.md", "docs/BRANCH_POLICY.md",
-         "docs/native/libsimple.md", "AGENTS.md")
+         "docs/ARMV7_VALIDATION.md", "docs/native/libsimple.md", "AGENTS.md")
 STATE = ".fork-state.json"
 
 
@@ -70,7 +70,7 @@ class GitHub:
                     body = response.read()
                     return body if raw else json.loads(body) if body else None
             except urllib.error.HTTPError as error:
-                if error.code == 404:
+                if error.code == 404 and method == "GET":
                     return None
                 # Only reads are retried here. Retrying a mutation blindly can create
                 # duplicate releases/assets; the next scheduled run reconciles them.
@@ -93,7 +93,15 @@ class GitHub:
             page += 1
 
     def release(self, tag):
-        return self.request("releases/tags/" + urllib.parse.quote(tag, safe=""))
+        published = self.request("releases/tags/" + urllib.parse.quote(tag, safe=""))
+        if published:
+            return published
+        # The tag endpoint only promises published releases. Drafts must be
+        # discovered through authenticated listings, then fetched by ID.
+        drafts = [r for r in self.pages("releases") if r.get("draft") and r.get("tag_name") == tag]
+        if len(drafts) > 1:
+            raise RuntimeError(f"Multiple drafts use tag {tag}; resolve the ambiguity before retrying")
+        return self.request(f"releases/{drafts[0]['id']}") if drafts else None
 
     def sha(self, ref):
         commit = self.request("commits/" + urllib.parse.quote(ref, safe=""))
@@ -117,6 +125,8 @@ def release_manifest(api, release, upstream_sha):
         return None
     info_bytes = asset_bytes(api, assets["build-info.json"])
     manifest = json.loads(info_bytes)
+    if release["draft"] and not manifest.get("release_workflows_omitted"):
+        return None
     if manifest.get("upstream_sha") != upstream_sha or manifest.get("tag") != release["tag_name"]:
         raise RuntimeError("Existing release provenance does not match the upstream tag")
     apk = assets.get(manifest["apk"])
@@ -212,6 +222,16 @@ def copy_owned(source, target):
             shutil.copyfile(src, dst)
 
 
+def strip_release_workflows(target):
+    # Release commits contain application/build sources, not executable workflows.
+    # GitHub's release API requires Workflows:write for targets adding/modifying
+    # workflow files relative to default; GITHUB_TOKEN cannot obtain that scope.
+    # A tree with no workflows only removes them, including after master changes.
+    workflow_dir = target / ".github/workflows"
+    if workflow_dir.exists():
+        shutil.rmtree(workflow_dir)
+
+
 def prepare(args):
     cfg = config()
     if not re.fullmatch(r"[0-9a-f]{40}", args.upstream_sha):
@@ -226,7 +246,10 @@ def prepare(args):
     git("read-tree", "--reset", "-u", args.upstream_sha, cwd=target)
     copy_owned(ROOT, target)
     subprocess.run([sys.executable, str(target / "scripts/ci/apply-overlay.py"), str(target)], check=True)
+    if args.tag:
+        strip_release_workflows(target)
     state = {"schema": 1, "upstream_sha": args.upstream_sha, "overlay_sha256": overlay_hash(),
+             "release_workflows_omitted": bool(args.tag),
              "build_overlay_sha256": build_hash(),
              "control_sha": git("rev-parse", "HEAD"), "checked_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     (target / STATE).write_text(json.dumps(state, indent=2) + "\n")
