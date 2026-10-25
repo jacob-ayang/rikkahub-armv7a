@@ -174,6 +174,14 @@ class OverlayTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Upstream structure changed"):
                 overlay.replace_once(file, "old", "new")
 
+    def test_inserting_after_an_existing_anchor_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            file = Path(temporary) / "fixture"
+            file.write_text("anchor")
+            overlay.replace_once(file, "anchor", "anchor\naddition")
+            overlay.replace_once(file, "anchor", "anchor\naddition")
+            self.assertEqual(file.read_text(), "anchor\naddition")
+
     def test_preserves_controller_when_upstream_deletes_workflow(self):
         with tempfile.TemporaryDirectory() as temporary:
             src, dst = Path(temporary) / "control", Path(temporary) / "upstream"

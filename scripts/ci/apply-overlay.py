@@ -9,7 +9,7 @@ import shutil
 
 def replace_once(path, old, new):
     text = path.read_text()
-    if new in text and old not in text:
+    if new in text and text.count(old) == new.count(old):
         return
     if text.count(old) != 1:
         raise RuntimeError(f"Upstream structure changed: {path}: expected exactly one {old!r}")
