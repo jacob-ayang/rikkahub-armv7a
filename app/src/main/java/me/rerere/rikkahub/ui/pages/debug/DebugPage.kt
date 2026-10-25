@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.debug
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,14 +17,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -33,18 +35,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dokar.sonner.ToastType
+import me.rerere.ui.toast.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.common.android.Logging
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Bug01
+import me.rerere.hugeicons.stroke.File01
+import me.rerere.hugeicons.stroke.PaintBoard
+import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.MathBlock
 import me.rerere.rikkahub.ui.components.richtext.Mermaid
+import me.rerere.rikkahub.ui.components.ui.PagerTab
+import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -53,10 +65,21 @@ import kotlin.random.Random
 import kotlin.random.nextInt
 import kotlin.uuid.Uuid
 
+private enum class DebugTab(
+    override val icon: ImageVector,
+    private val title: String,
+) : PagerTab {
+    MAIN(HugeIcons.Bug01, "Main"),
+    COLORS(HugeIcons.PaintBoard, "Colors"),
+    LOGGING(HugeIcons.File01, "Logging"),
+    RECOVERY(HugeIcons.Wrench01, "Recovery");
+
+    override val label: String
+        @Composable get() = title
+}
+
 @Composable
 fun DebugPage(vm: DebugVM = koinViewModel()) {
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -69,47 +92,29 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
             )
         }
     ) { contentPadding ->
-        val state = rememberPagerState { 2 }
+        val state = rememberPagerState { DebugTab.entries.size }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(contentPadding)
         ) {
-            SecondaryTabRow(
-                selectedTabIndex = state.currentPage,
-            ) {
-                Tab(
-                    selected = state.currentPage == 0,
-                    onClick = {
-                        scope.launch {
-                            state.animateScrollToPage(0)
-                        }
-                    },
-                    text = {
-                        Text("Main")
-                    }
-                )
-                Tab(
-                    selected = state.currentPage == 1,
-                    onClick = {
-                        scope.launch {
-                            state.animateScrollToPage(1)
-                        }
-                    },
-                    text = {
-                        Text("Logging")
-                    }
-                )
-            }
+            PagerTabs(
+                pagerState = state,
+                tabs = DebugTab.entries,
+                modifier = Modifier.padding(vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            )
             HorizontalPager(
                 state = state,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) { page ->
-                when (page) {
-                    0 -> MainPage(vm)
-                    1 -> Box {}
+                when (DebugTab.entries[page]) {
+                    DebugTab.MAIN -> MainPage(vm)
+                    DebugTab.COLORS -> ColorsPage()
+                    DebugTab.LOGGING -> Box {}
+                    DebugTab.RECOVERY -> RecoveryPage(vm)
                 }
             }
         }
@@ -119,6 +124,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
 @Composable
 private fun MainPage(vm: DebugVM) {
     val settings = LocalSettings.current
+    val conversationCount by vm.conversationCount.collectAsStateWithLifecycle()
     Column(
         modifier = Modifier
             .padding(8.dp)
@@ -173,11 +179,11 @@ private fun MainPage(vm: DebugVM) {
         }
         Button(
             onClick = {
-                vm.updateSettings(
-                    settings.copy(
+                vm.updateSettings {
+                    it.copy(
                         chatModelId = Uuid.random()
                     )
-                )
+                }
             }
         ) {
             Text("重置Chat模型")
@@ -189,6 +195,19 @@ private fun MainPage(vm: DebugVM) {
             }
         ) {
             Text("崩溃")
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Conversation 数量: ${conversationCount?.toString() ?: "..."}",
+                modifier = Modifier.weight(1f),
+            )
+            Button(onClick = { vm.refreshConversationCount() }) {
+                Text("刷新")
+            }
         }
 
         Button(
@@ -213,8 +232,9 @@ private fun MainPage(vm: DebugVM) {
 
         Text("Launch Stats", style = MaterialTheme.typography.labelMedium)
 
-        var launchCountInput by remember(settings.launchCount) {
-            mutableStateOf(settings.launchCount.toString())
+        val launchCount by vm.launchCount.collectAsStateWithLifecycle()
+        var launchCountInput by remember(launchCount) {
+            mutableStateOf(launchCount.toString())
         }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -223,14 +243,12 @@ private fun MainPage(vm: DebugVM) {
             OutlinedTextField(
                 value = launchCountInput,
                 onValueChange = { launchCountInput = it },
-                label = { Text("launchCount (current: ${settings.launchCount})") },
+                label = { Text("launchCount (current: $launchCount)") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
             )
             Button(onClick = {
-                launchCountInput.toIntOrNull()?.let {
-                    vm.updateSettings(settings.copy(launchCount = it))
-                }
+                launchCountInput.toIntOrNull()?.let(vm::setLaunchCount)
             }) {
                 Text("Set")
             }
@@ -252,7 +270,7 @@ private fun MainPage(vm: DebugVM) {
             )
             Button(onClick = {
                 dismissedAtInput.toIntOrNull()?.let {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = it))
+                    vm.updateSettings { latest -> latest.copy(sponsorAlertDismissedAt = it) }
                 }
             }) {
                 Text("Set")
@@ -268,4 +286,169 @@ private fun MainPage(vm: DebugVM) {
             modifier = Modifier.fillMaxWidth()
         )
     }
+}
+
+@Composable
+private fun RecoveryPage(vm: DebugVM) {
+    val settings = LocalSettings.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    val conversationAssistants by vm.conversationAssistants.collectAsStateWithLifecycle()
+    val existingIds = settings.assistants.map { it.id }.toSet()
+    val missing = conversationAssistants
+        ?.filterKeys { it !in existingIds }
+        ?.entries
+        ?.sortedByDescending { it.value }
+    var recovering by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .padding(8.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            "扫描聊天记录中引用的助手，为设置中缺失的助手创建占位助手，使对应聊天记录重新可见。助手的其他配置无法恢复。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text("设置中的助手数: ${settings.assistants.size}")
+        Text("聊天记录中的助手数: ${conversationAssistants?.size?.toString() ?: "..."}")
+        Text("缺失的助手数: ${missing?.size?.toString() ?: "..."}")
+        missing?.forEach { (id, count) ->
+            Text(
+                "$id ($count 个对话)",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = JetbrainsMono,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.scanConversationAssistants() }) {
+                Text("重新扫描")
+            }
+            Button(
+                enabled = !recovering && !settings.init && !missing.isNullOrEmpty(),
+                onClick = {
+                    recovering = true
+                    scope.launch {
+                        runCatching { vm.recoverAssistantsFromConversations() }
+                            .onSuccess { count ->
+                                when (count) {
+                                    null -> toaster.show("设置尚未加载", type = ToastType.Error)
+                                    0 -> toaster.show("没有需要恢复的助手")
+                                    else -> toaster.show("已恢复 $count 个助手", type = ToastType.Success)
+                                }
+                            }
+                            .onFailure {
+                                toaster.show("恢复失败: ${it.message}", type = ToastType.Error)
+                            }
+                        recovering = false
+                    }
+                }
+            ) {
+                Text("恢复")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColorsPage() {
+    val colorScheme = MaterialTheme.colorScheme
+    val colorTokens = remember(colorScheme) {
+        listOf(
+            "primary" to colorScheme.primary,
+            "onPrimary" to colorScheme.onPrimary,
+            "primaryContainer" to colorScheme.primaryContainer,
+            "onPrimaryContainer" to colorScheme.onPrimaryContainer,
+            "inversePrimary" to colorScheme.inversePrimary,
+            "secondary" to colorScheme.secondary,
+            "onSecondary" to colorScheme.onSecondary,
+            "secondaryContainer" to colorScheme.secondaryContainer,
+            "onSecondaryContainer" to colorScheme.onSecondaryContainer,
+            "tertiary" to colorScheme.tertiary,
+            "onTertiary" to colorScheme.onTertiary,
+            "tertiaryContainer" to colorScheme.tertiaryContainer,
+            "onTertiaryContainer" to colorScheme.onTertiaryContainer,
+            "background" to colorScheme.background,
+            "onBackground" to colorScheme.onBackground,
+            "surface" to colorScheme.surface,
+            "onSurface" to colorScheme.onSurface,
+            "surfaceVariant" to colorScheme.surfaceVariant,
+            "onSurfaceVariant" to colorScheme.onSurfaceVariant,
+            "surfaceTint" to colorScheme.surfaceTint,
+            "inverseSurface" to colorScheme.inverseSurface,
+            "inverseOnSurface" to colorScheme.inverseOnSurface,
+            "surfaceBright" to colorScheme.surfaceBright,
+            "surfaceDim" to colorScheme.surfaceDim,
+            "surfaceContainer" to colorScheme.surfaceContainer,
+            "surfaceContainerHigh" to colorScheme.surfaceContainerHigh,
+            "surfaceContainerHighest" to colorScheme.surfaceContainerHighest,
+            "surfaceContainerLow" to colorScheme.surfaceContainerLow,
+            "surfaceContainerLowest" to colorScheme.surfaceContainerLowest,
+            "error" to colorScheme.error,
+            "onError" to colorScheme.onError,
+            "errorContainer" to colorScheme.errorContainer,
+            "onErrorContainer" to colorScheme.onErrorContainer,
+            "outline" to colorScheme.outline,
+            "outlineVariant" to colorScheme.outlineVariant,
+            "scrim" to colorScheme.scrim,
+            "primaryFixed" to colorScheme.primaryFixed,
+            "primaryFixedDim" to colorScheme.primaryFixedDim,
+            "onPrimaryFixed" to colorScheme.onPrimaryFixed,
+            "onPrimaryFixedVariant" to colorScheme.onPrimaryFixedVariant,
+            "secondaryFixed" to colorScheme.secondaryFixed,
+            "secondaryFixedDim" to colorScheme.secondaryFixedDim,
+            "onSecondaryFixed" to colorScheme.onSecondaryFixed,
+            "onSecondaryFixedVariant" to colorScheme.onSecondaryFixedVariant,
+            "tertiaryFixed" to colorScheme.tertiaryFixed,
+            "tertiaryFixedDim" to colorScheme.tertiaryFixedDim,
+            "onTertiaryFixed" to colorScheme.onTertiaryFixed,
+            "onTertiaryFixedVariant" to colorScheme.onTertiaryFixedVariant,
+        )
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items(colorTokens, key = { it.first }) { (name, color) ->
+            ColorTokenItem(name, color)
+        }
+    }
+}
+
+@Composable
+private fun ColorTokenItem(name: String, color: Color) {
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clip(shape)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .height(40.dp)
+                .weight(1f)
+                .clip(RoundedCornerShape(4.dp))
+                .background(color)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(4.dp))
+        )
+        Column(modifier = Modifier.weight(2f)) {
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                color.toHexString(),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = JetbrainsMono,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun Color.toHexString(): String {
+    val argb = toArgb()
+    return "#%08X".format(argb)
 }

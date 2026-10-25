@@ -3,16 +3,14 @@ package me.rerere.ai.ui
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
 import me.rerere.ai.util.json
+import kotlin.math.roundToInt
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
 // 公共消息抽象, 具体的Provider实现会转换为API接口需要的DTO
@@ -26,134 +24,30 @@ data class UIMessage(
         .toLocalDateTime(TimeZone.currentSystemDefault()),
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
+    // 模型名称的快照：modelId 指向的模型被删除后，靠它继续显示这条消息由谁生成
+    val modelSnapshot: ModelSnapshot? = null,
     val usage: TokenUsage? = null,
-    val translation: String? = null
+    // 模型实际生成耗时（各步从首个 chunk 到响应结束的累计），不含首 token 延迟、工具执行和审批等待
+    val generationTimeMs: Long? = null,
+    // 最后一次请求自己的 usage；usage 是多步累计值，看上下文占用和缓存命中要用这个
+    val lastUsage: TokenUsage? = null,
+    // 这条消息累计请求了多少次模型（多轮工具调用共用同一条消息）
+    val stepCount: Int? = null,
+    val translation: String? = null,
+    // 压缩检查点：此消息是它之前全部历史的摘要，组装请求时从最后一个检查点开始取
+    val isContextCheckpoint: Boolean = false,
+    // 请求期间生成的内部消息；该标记仅在内存中使用
+    @Transient
+    val isSynthetic: Boolean = false,
 ) {
-    private fun appendChunk(chunk: MessageChunk): UIMessage {
-        val choice = chunk.choices.getOrNull(0)
-        val message = choice?.delta ?: choice?.message
-        return message?.let { delta ->
-            // Handle Parts
-            var newParts = delta.parts.fold(parts) { acc, deltaPart ->
-                when (deltaPart) {
-                    is UIMessagePart.Text -> {
-                        // Skip empty text deltas
-                        if (deltaPart.text.isEmpty()) {
-                            acc
-                        } else {
-                            val lastPart = acc.lastOrNull()
-                            if (lastPart is UIMessagePart.Text) {
-                                // Append to the last Text part
-                                acc.dropLast(1) + lastPart.copy(text = lastPart.text + deltaPart.text)
-                            } else {
-                                // Create new Text part
-                                acc + deltaPart
-                            }
-                        }
-                    }
-
-                    is UIMessagePart.Image -> {
-                        val lastPart = acc.lastOrNull()
-                        if (lastPart is UIMessagePart.Image) {
-                            // Append to the last Image part (for streaming base64)
-                            acc.dropLast(1) + lastPart.copy(
-                                url = lastPart.url + deltaPart.url,
-                                metadata = deltaPart.metadata ?: lastPart.metadata
-                            )
-                        } else {
-                            // Create new Image part
-                            acc + UIMessagePart.Image(
-                                url = "data:image/png;base64,${deltaPart.url}",
-                                metadata = deltaPart.metadata,
-                            )
-                        }
-                    }
-
-                    is UIMessagePart.Reasoning -> {
-                        // Skip empty reasoning deltas
-                        if (deltaPart.reasoning.isEmpty() && deltaPart.metadata == null) {
-                            acc
-                        } else {
-                            val lastPart = acc.lastOrNull()
-                            if (lastPart is UIMessagePart.Reasoning) {
-                                // Append to the last Reasoning part
-                                acc.dropLast(1) + UIMessagePart.Reasoning(
-                                    reasoning = lastPart.reasoning + deltaPart.reasoning,
-                                    createdAt = lastPart.createdAt,
-                                    finishedAt = null,
-                                ).also {
-                                    it.metadata = deltaPart.metadata ?: lastPart.metadata
-                                }
-                            } else {
-                                // Create new Reasoning part
-                                acc + deltaPart
-                            }
-                        }
-                    }
-
-                    is UIMessagePart.Tool -> {
-                        if (deltaPart.toolCallId.isBlank()) {
-                            // No ID yet - append to the last Tool if it also has no ID
-                            val lastTool = acc.lastOrNull { it is UIMessagePart.Tool } as? UIMessagePart.Tool
-                            if (lastTool != null) {
-                                acc.map { part ->
-                                    if (part === lastTool) part.merge(deltaPart) else part
-                                }
-                            } else {
-                                acc + deltaPart.copy()
-                            }
-                        } else {
-                            // Has ID - find and update by ID, or insert new
-                            val existsPart = acc.find {
-                                it is UIMessagePart.Tool && it.toolCallId == deltaPart.toolCallId
-                            } as? UIMessagePart.Tool
-                            if (existsPart == null) {
-                                acc + deltaPart.copy()
-                            } else {
-                                acc.map { part ->
-                                    if (part is UIMessagePart.Tool && part.toolCallId == deltaPart.toolCallId) {
-                                        part.merge(deltaPart)
-                                    } else part
-                                }
-                            }
-                        }
-                    }
-
-                    else -> {
-                        println("delta part append not supported: $deltaPart")
-                        acc
-                    }
-                }
-            }
-            // Handle Reasoning End
-            if (parts.filterIsInstance<UIMessagePart.Reasoning>()
-                    .isNotEmpty() && delta.parts.filterIsInstance<UIMessagePart.Reasoning>()
-                    .isEmpty()
-            ) {
-                newParts = newParts.map { part ->
-                    if (part is UIMessagePart.Reasoning && part.finishedAt == null) {
-                        part.copy(finishedAt = Clock.System.now())
-                    } else part
-                }
-            }
-            // Handle annotations
-            val newAnnotations = delta.annotations.ifEmpty {
-                annotations
-            }
-            copy(
-                parts = newParts,
-                annotations = newAnnotations,
-            )
-        } ?: this
-    }
-
-    fun summaryAsText(): String {
-        return "[${role.name}]: " + parts.joinToString(separator = "\n") { part ->
+    fun summaryAsText(maxLength: Int = Int.MAX_VALUE): String {
+        val text = "[${role.name}]: " + parts.joinToString(separator = "\n") { part ->
             when (part) {
                 is UIMessagePart.Text -> part.text
                 else -> ""
             }
         }
+        return if (text.length > maxLength) text.take(maxLength) + "..." else text
     }
 
     fun toText() = parts.joinToString(separator = "\n") { part ->
@@ -187,8 +81,25 @@ data class UIMessage(
         it is UIMessagePart.Image && it.url.startsWith("data:")
     }
 
-    operator fun plus(chunk: MessageChunk): UIMessage {
-        return this.appendChunk(chunk)
+    /**
+     * 最后一次请求的 usage
+     *
+     * 没有 [lastUsage] 的旧消息退回用 [usage]：多步消息的 usage 是累计值，会比实际偏大。
+     */
+    fun lastRequestUsage(): TokenUsage? = lastUsage ?: usage
+
+    /** 最后一次请求结束时的上下文占用（prompt + completion） */
+    fun contextTokens(): Int? = lastRequestUsage()?.let { it.promptTokens + it.completionTokens }
+
+    /**
+     * 用快照还原出一个只用于展示名称和图标的 [Model]
+     *
+     * 仅在按 [modelId] 查不到模型时使用；其余字段都是默认值，不能拿它发起请求。
+     */
+    fun snapshotModel(): Model? {
+        val id = modelId ?: return null
+        val snapshot = modelSnapshot ?: return null
+        return Model(modelId = snapshot.modelId, displayName = snapshot.displayName, id = id)
     }
 
     companion object {
@@ -210,26 +121,13 @@ data class UIMessage(
 }
 
 /**
- * 处理MessageChunk合并
- *
- * @receiver 已有消息列表
- * @param chunk 消息chunk
- * @param model 模型, 可以不传，如果传了，会把模型id写入到消息，标记是哪个模型输出的消息
- * @return 新消息列表
+ * 消息上保存的模型名称快照, 对应 [Model.modelId] 与 [Model.displayName]
  */
-fun List<UIMessage>.handleMessageChunk(chunk: MessageChunk, model: Model? = null): List<UIMessage> {
-    require(this.isNotEmpty()) {
-        "messages must not be empty"
-    }
-    val choice = chunk.choices.getOrNull(0) ?: return this
-    val message = choice.delta ?: choice.message ?: return this
-    if (this.last().role != message.role) {
-        return this + (UIMessage(modelId = model?.id, role = message.role, parts = emptyList()) + chunk)
-    } else {
-        val last = this.last() + chunk
-        return this.dropLast(1) + last
-    }
-}
+@Serializable
+data class ModelSnapshot(
+    val modelId: String,
+    val displayName: String,
+)
 
 /**
  * 判断这个消息是否有有任何用户**可输入内容**
@@ -263,18 +161,71 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
             is UIMessagePart.Reasoning -> message.reasoning.isBlank()
             is UIMessagePart.Video -> message.url.isBlank()
             is UIMessagePart.Audio -> message.url.isBlank()
+            is UIMessagePart.Tool,
+            is UIMessagePart.ServerTool,
+            -> false
             else -> true
         }
     }
 }
 
-fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
-    if (size <= 0 || this.size <= size) return this
+/**
+ * 截断后保留的消息条数占上限的比例
+ *
+ * 越小则截断点前进的步幅越大, 连续命中缓存的轮数越多, 但一次丢弃的上下文也越多
+ */
+private const val CONTEXT_KEEP_RATIO = 0.5f
 
-    val startIndex = this.size - size
+/**
+ * 截取实际发送给模型的上下文
+ *
+ * 先丢弃最后一个压缩检查点之前的消息(它们只保留给用户查看), 再按 [limit] 限制条数。
+ * 检查点本身是被压缩历史的唯一来源, 始终保留, 条数限制只作用于它之后的消息。
+ *
+ * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
+ */
+fun List<UIMessage>.limitContext(limit: Int): List<UIMessage> {
+    val checkpointIndex = indexOfLast { it.isContextCheckpoint }
+    if (checkpointIndex < 0) return limitMessageCount(limit)
+    return listOf(this[checkpointIndex]) + subList(checkpointIndex + 1, size).limitMessageCount(limit)
+}
+
+/**
+ * 按阶梯式(滞回)策略限制上下文消息数量
+ *
+ * 与每轮平移一条的滑动窗口不同, 截断点只在消息数越过 [limit] 时才前进一大步,
+ * 在此之后的连续多轮里保持不动, 使请求前缀保持稳定, 从而命中提示词缓存。
+ * 截断点仅由消息条数推导, 不需要额外持久化状态, 且对追加消息天然稳定。
+ *
+ * 保留的条数始终落在 `[limit * CONTEXT_KEEP_RATIO, limit)` 区间内。
+ *
+ * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
+ */
+private fun List<UIMessage>.limitMessageCount(limit: Int): List<UIMessage> {
+    if (limit <= 0 || this.size <= limit) return this
+
+    // 截断后回落到的目标条数, 以及两次截断之间截断点前进的步幅
+    // limit 为 1 时无法构造滞回(步幅至少为 1), 此时退化为逐条平移的滑动窗口
+    val target = (limit * CONTEXT_KEEP_RATIO).roundToInt().coerceIn(1, limit)
+    val stride = (limit - target).coerceAtLeast(1)
+
+    // 每越过一级台阶, 截断点前进 stride 条; 台阶之内截断点不动
+    // 上界兜底保证至少保留一条消息, 正常路径(limit >= 2)不会触发
+    val startIndex = (((this.size - limit) / stride + 1) * stride).coerceAtMost(this.size - 1)
+
+    return this.subList(alignContextStart(startIndex), this.size)
+}
+
+/**
+ * 将截断起点回退到安全边界, 避免把 tool call 与其结果拆散, 或让上下文从半截的工具调用开始
+ *
+ * 只会向前(下标减小)调整, 因此不会破坏 [limitMessageCount] 保留条数的下界。
+ * 调整只依赖 `[0, startIndex]` 区间内的消息, 这部分在追加新消息时不会变化, 结果因此保持稳定。
+ */
+private fun List<UIMessage>.alignContextStart(startIndex: Int): Int {
     var adjustedStartIndex = startIndex
 
-    // 循环往前查找，直到满足所有依赖条件
+    // 循环往前查找, 直到满足所有依赖条件
     var needsAdjustment = true
     val visitedIndices = mutableSetOf<Int>()
 
@@ -310,173 +261,13 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
         }
     }
 
-    return this.subList(adjustedStartIndex, this.size)
-}
-
-@Serializable
-sealed class ToolApprovalState {
-    @Serializable
-    @SerialName("auto")
-    data object Auto : ToolApprovalState()
-
-    @Serializable
-    @SerialName("pending")
-    data object Pending : ToolApprovalState()
-
-    @Serializable
-    @SerialName("approved")
-    data object Approved : ToolApprovalState()
-
-    @Serializable
-    @SerialName("denied")
-    data class Denied(val reason: String = "") : ToolApprovalState()
-
-    @Serializable
-    @SerialName("answered")
-    data class Answered(val answer: String) : ToolApprovalState()
-}
-
-fun ToolApprovalState.canResumeToolExecution(): Boolean {
-    return when (this) {
-        ToolApprovalState.Approved -> true
-        is ToolApprovalState.Denied -> true
-        is ToolApprovalState.Answered -> true
-        ToolApprovalState.Auto,
-        ToolApprovalState.Pending,
-            -> false
-    }
-}
-
-@Serializable
-sealed class UIMessagePart {
-    abstract val metadata: JsonObject?
-
-    @Serializable
-    @SerialName("text")
-    data class Text(
-        val text: String,
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart()
-
-    @Serializable
-    @SerialName("image")
-    data class Image(
-        val url: String,
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart()
-
-    @Serializable
-    @SerialName("video")
-    data class Video(
-        val url: String,
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart()
-
-    @Serializable
-    @SerialName("audio")
-    data class Audio(
-        val url: String,
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart()
-
-    @Serializable
-    @SerialName("document")
-    data class Document(
-        val url: String,
-        val fileName: String,
-        val mime: String = "text/*",
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart()
-
-    @Serializable
-    @SerialName("reasoning")
-    data class Reasoning(
-        val reasoning: String,
-        val createdAt: Instant = Clock.System.now(),
-        val finishedAt: Instant? = Clock.System.now(),
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart()
-
-    @Deprecated("Deprecated")
-    @Serializable
-    @SerialName("search")
-    data object Search : UIMessagePart() {
-        override var metadata: JsonObject? = null
-    }
-
-    @Deprecated("Use UIMessagePart.Tool instead")
-    @Serializable
-    @SerialName("tool_call")
-    data class ToolCall(
-        val toolCallId: String,
-        val toolName: String,
-        val arguments: String,
-        val approvalState: ToolApprovalState = ToolApprovalState.Auto,
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        fun merge(other: ToolCall): ToolCall {
-            return ToolCall(
-                toolCallId = toolCallId,
-                toolName = toolName + other.toolName,
-                arguments = arguments + other.arguments,
-                approvalState = approvalState,
-                metadata = if (other.metadata != null) other.metadata else metadata,
-            )
-        }
-    }
-
-    @Deprecated("Use UIMessagePart.Tool instead")
-    @Serializable
-    @SerialName("tool_result")
-    data class ToolResult(
-        val toolCallId: String,
-        val toolName: String,
-        val content: JsonElement,
-        val arguments: JsonElement,
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart()
-
-    @Serializable
-    @SerialName("tool")
-    data class Tool(
-        val toolCallId: String,
-        val toolName: String,
-        val input: String,
-        val output: List<UIMessagePart> = emptyList(),
-        val approvalState: ToolApprovalState = ToolApprovalState.Auto,
-        override var metadata: JsonObject? = null
-    ) : UIMessagePart() {
-        /** Whether the tool has been executed (has output) */
-        val isExecuted: Boolean get() = output.isNotEmpty()
-
-        /** Whether the tool is pending user approval */
-        val isPending: Boolean get() = approvalState is ToolApprovalState.Pending
-
-        /** Whether generation can resume and handle this tool immediately */
-        val canResumeExecution: Boolean get() = !isExecuted && approvalState.canResumeToolExecution()
-
-        /** Parse input string as JsonElement */
-        fun inputAsJson(): JsonElement = runCatching {
-            json.parseToJsonElement(input.ifBlank { "{}" })
-        }.getOrElse { JsonObject(emptyMap()) }
-
-        fun merge(other: Tool): Tool {
-            return Tool(
-                toolCallId = toolCallId,
-                toolName = toolName + other.toolName,
-                input = input + other.input,
-                output = output + other.output,
-                approvalState = approvalState,
-                metadata = if (other.metadata != null) other.metadata else metadata,
-            )
-        }
-    }
+    return adjustedStartIndex
 }
 
 /**
  * Sort message parts by type priority:
  * - Reasoning (-1): shown first
- * - Text, Tool, ToolCall, ToolResult, Search (0): middle
+ * - Text, Tool, ServerTool, ToolCall, ToolResult, Search (0): middle
  * - Image, Video, Audio, Document (1): shown last
  *
  * WARNING: This function is intended for migration only.
@@ -499,6 +290,7 @@ fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
             is UIMessagePart.Reasoning -> -1
             is UIMessagePart.Text -> 0
             is UIMessagePart.Tool -> 0
+            is UIMessagePart.ServerTool -> 0
             is UIMessagePart.ToolCall -> 0
             is UIMessagePart.ToolResult -> 0
             is UIMessagePart.Search -> 0
@@ -712,8 +504,12 @@ fun <T> List<T>.migrateToolNodes(
                                                 )
                                             )
                                         )
-                                    } else part
-                                } else part
+                                    } else {
+                                        part
+                                    }
+                                } else {
+                                    part
+                                }
                             }
 
                             is UIMessagePart.ToolCall -> {
@@ -764,29 +560,3 @@ fun <T> List<T>.migrateToolNodes(
 
     return result
 }
-
-@Serializable
-sealed class UIMessageAnnotation {
-    @Serializable
-    @SerialName("url_citation")
-    data class UrlCitation(
-        val title: String,
-        val url: String
-    ) : UIMessageAnnotation()
-}
-
-@Serializable
-data class MessageChunk(
-    val id: String,
-    val model: String,
-    val choices: List<UIMessageChoice>,
-    val usage: TokenUsage? = null,
-)
-
-@Serializable
-data class UIMessageChoice(
-    val index: Int,
-    val delta: UIMessage?,
-    val message: UIMessage?,
-    val finishReason: String?
-)

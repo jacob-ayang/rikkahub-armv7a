@@ -1,33 +1,16 @@
-# Branch Policy
+# Branch policy
 
-## Mainline
-
-- `master` is the only long-lived release branch.
-- All production releases and prereleases are built from `master` or `sync/upstream-*` branches.
-
-## Automated Sync Branches
-
-- Sync branches follow this format:
-  - `sync/upstream-YYYYMMDD-HHMM-<shortsha>`
-- These branches are created by `.github/workflows/sync-upstream.yml`.
-- Pull requests from sync branches always target `master`.
-
-## Archived Backup Branches
-
-- The following branches are archived and frozen:
-  - `backup-master-20260216-015025`
-  - `backup/before-reset-1091165d`
-- They are kept for history/reference only.
-- They must not be used as CI/CD trigger branches.
-
-## CI Scope
-
-- Automated upstream sync workflow is schedule/manual only.
-- Release workflow is manual or called by sync workflow.
-- No branch push workflow should target backup branches.
-
-## Conflict Policy
-
-- If syncing `upstream/master` introduces merge conflicts, the sync workflow fails.
-- In conflict state, no automatic prerelease/release is created.
-- Conflicts must be resolved in a normal PR to `master`.
+- `master` is the long-lived development and automation branch.
+- Daily upstream snapshots advance master only after the reusable signed build and checks pass.
+- Snapshot commits retain both the previous master and upstream commit as parents.
+- Master updates are normal fast-forward pushes with an explicit expected-base check.
+- Official releases build the exact upstream tag with the current owned fork overlay, even when
+  development master is ahead of that tag. Successful source commits are retained at
+  `build/armv7/<full-sha>`; local release tags identify those commits. Release source snapshots
+  contain no workflow definitions, while their metadata records the immutable controller SHA.
+- Legacy `sync/upstream-*` PRs are no longer created or merged automatically. PR #17 is superseded.
+- Existing backup branches and old release tags are preserved and never used as automation inputs.
+- Upstream scheduled workflows are not enabled in this fork. Only the fork controller and reusable
+  build/release workflow run.
+- Shared-file changes must be reproduced by `scripts/ci/apply-overlay.py` or the templates in `fork`.
+  The owned paths are explicitly listed in automation.py. Upstream structure changes fail closed.

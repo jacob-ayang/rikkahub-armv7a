@@ -7,12 +7,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,21 +26,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Remove01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 
 @Composable
 fun CompressContextDialog(
     onDismiss: () -> Unit,
-    onConfirm: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job
+    onConfirm: (additionalPrompt: String, keepRecentMessages: Int) -> Job
 ) {
     var additionalPrompt by remember { mutableStateOf("") }
-    var selectedTokens by remember { mutableIntStateOf(2000) }
-    var keepRecentMessages by remember { mutableIntStateOf(32) }
-    val tokenOptions = listOf(500, 1000, 2000, 4000)
-    val keepRecentOptions = listOf(0, 16, 32, 64)
+    // 默认全部压缩，请求前缀与对话一致，缓存命中最好
+    var keepRecentMessages by remember { mutableIntStateOf(0) }
     var currentJob by remember { mutableStateOf<Job?>(null) }
     val isLoading = currentJob?.isActive == true
 
@@ -72,7 +74,7 @@ fun CompressContextDialog(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RabbitLoadingIndicator(
+                        ContainedLoadingIndicator(
                             modifier = Modifier.size(32.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -80,50 +82,6 @@ fun CompressContextDialog(
                     }
                 } else {
                     Text(stringResource(R.string.chat_page_compress_context_desc))
-
-                    // Token size selector
-                    Text(
-                        text = stringResource(R.string.chat_page_compress_target_tokens),
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        tokenOptions.forEachIndexed { index, tokens ->
-                            SegmentedButton(
-                                selected = selectedTokens == tokens,
-                                onClick = { selectedTokens = tokens },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = tokenOptions.size
-                                )
-                            ) {
-                                Text("$tokens")
-                            }
-                        }
-                    }
-
-                    // Keep recent messages selector
-                    Text(
-                        text = stringResource(R.string.chat_page_compress_keep_recent),
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        keepRecentOptions.forEachIndexed { index, count ->
-                            SegmentedButton(
-                                selected = keepRecentMessages == count,
-                                onClick = { keepRecentMessages = count },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = keepRecentOptions.size
-                                )
-                            ) {
-                                Text("$count")
-                            }
-                        }
-                    }
 
                     // Additional context input
                     OutlinedTextField(
@@ -139,12 +97,38 @@ fun CompressContextDialog(
                         maxLines = 4,
                     )
 
-                    // Warning text
-                    Text(
-                        text = stringResource(R.string.chat_page_compress_warning),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.chat_page_compress_keep_recent),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            FilledTonalIconButton(
+                                onClick = { keepRecentMessages-- },
+                                enabled = keepRecentMessages > 0,
+                            ) {
+                                Icon(HugeIcons.Remove01, contentDescription = "Decrease")
+                            }
+                            Text(
+                                text = keepRecentMessages.toString(),
+                                style = MaterialTheme.typography.titleMediumEmphasized,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.widthIn(min = 40.dp),
+                            )
+                            FilledTonalIconButton(onClick = { keepRecentMessages++ }) {
+                                Icon(HugeIcons.Add01, contentDescription = "Increase")
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.chat_page_compress_keep_recent_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         },
@@ -158,7 +142,7 @@ fun CompressContextDialog(
                 }
             } else {
                 TextButton(onClick = {
-                    currentJob = onConfirm(additionalPrompt, selectedTokens, keepRecentMessages)
+                    currentJob = onConfirm(additionalPrompt, keepRecentMessages)
                 }) {
                     Text(stringResource(R.string.confirm))
                 }

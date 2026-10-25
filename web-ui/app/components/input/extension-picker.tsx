@@ -11,28 +11,22 @@ import { extractErrorMessage } from "~/lib/error";
 import { safeStringArray } from "~/lib/type-guards";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import type {
-  LorebookProfile,
-  ModeInjectionProfile,
-  QuickMessage,
-} from "~/types";
+import type { ConversationDto, LorebookProfile, ModeInjectionProfile, QuickMessage } from "~/types";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { ScrollArea } from "~/components/ui/scroll-area";
 
 import { PickerErrorAlert } from "./picker-error-alert";
 
 export interface ExtensionPickerButtonProps {
   disabled?: boolean;
   className?: string;
+  conversation?: ConversationDto | null;
 }
 
 function getModeInjections(source: unknown): ModeInjectionProfile[] {
@@ -63,10 +57,10 @@ function getQuickMessages(source: unknown): QuickMessage[] {
   return source.filter((item): item is QuickMessage =>
     Boolean(
       item &&
-        typeof item === "object" &&
-        typeof item.id === "string" &&
-        typeof item.content === "string" &&
-        item.content.trim().length > 0,
+      typeof item === "object" &&
+      typeof item.id === "string" &&
+      typeof item.content === "string" &&
+      item.content.trim().length > 0,
     ),
   );
 }
@@ -76,6 +70,7 @@ type ActiveTab = "quickmessages" | "mode" | "lorebook";
 export function ExtensionPickerButton({
   disabled = false,
   className,
+  conversation = null,
 }: ExtensionPickerButtonProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
@@ -89,10 +84,7 @@ export function ExtensionPickerButton({
     () => getModeInjections(settings?.modeInjections),
     [settings?.modeInjections],
   );
-  const lorebooks = React.useMemo(
-    () => getLorebooks(settings?.lorebooks),
-    [settings?.lorebooks],
-  );
+  const lorebooks = React.useMemo(() => getLorebooks(settings?.lorebooks), [settings?.lorebooks]);
   const quickMessages = React.useMemo(
     () => getQuickMessages(settings?.quickMessages),
     [settings?.quickMessages],
@@ -102,20 +94,17 @@ export function ExtensionPickerButton({
     () => new Set(modeInjections.map((item) => item.id)),
     [modeInjections],
   );
-  const lorebookIdSet = React.useMemo(
-    () => new Set(lorebooks.map((item) => item.id)),
-    [lorebooks],
-  );
+  const lorebookIdSet = React.useMemo(() => new Set(lorebooks.map((item) => item.id)), [lorebooks]);
   const quickMessageIdSet = React.useMemo(
     () => new Set(quickMessages.map((item) => item.id)),
     [quickMessages],
   );
 
-  const selectedModeInjectionIds = React.useMemo(
+  const assistantModeInjectionIds = React.useMemo(
     () => safeStringArray(currentAssistant?.modeInjectionIds),
     [currentAssistant?.modeInjectionIds],
   );
-  const selectedLorebookIds = React.useMemo(
+  const assistantLorebookIds = React.useMemo(
     () => safeStringArray(currentAssistant?.lorebookIds),
     [currentAssistant?.lorebookIds],
   );
@@ -123,13 +112,24 @@ export function ExtensionPickerButton({
     () => safeStringArray(currentAssistant?.quickMessageIds),
     [currentAssistant?.quickMessageIds],
   );
+  // 会话开始后注入固定在会话上，开始前跟随助手。
+  // 旧会话在服务端固定配置之前 config 为空，此时仍然显示助手的，固定时会继承过去。
+  const conversationBound = conversation?.config != null;
+  const conversationModeInjectionIds = conversation?.modeInjectionIds;
+  const conversationLorebookIds = conversation?.lorebookIds;
+  const selectedModeInjectionIds = React.useMemo(
+    () =>
+      conversationBound ? safeStringArray(conversationModeInjectionIds) : assistantModeInjectionIds,
+    [assistantModeInjectionIds, conversationBound, conversationModeInjectionIds],
+  );
+  const selectedLorebookIds = React.useMemo(
+    () => (conversationBound ? safeStringArray(conversationLorebookIds) : assistantLorebookIds),
+    [assistantLorebookIds, conversationBound, conversationLorebookIds],
+  );
 
   const selectedCount =
-    selectedModeInjectionIds.length +
-    selectedLorebookIds.length +
-    selectedQuickMessageIds.length;
-  const hasData =
-    quickMessages.length > 0 || modeInjections.length > 0 || lorebooks.length > 0;
+    selectedModeInjectionIds.length + selectedLorebookIds.length + selectedQuickMessageIds.length;
+  const hasData = quickMessages.length > 0 || modeInjections.length > 0 || lorebooks.length > 0;
 
   React.useEffect(() => {
     if (!canUse || !hasData) {
@@ -147,7 +147,7 @@ export function ExtensionPickerButton({
     }
   }, [quickMessages.length, modeInjections.length, lorebooks.length]);
 
-  const updateExtensionsMutation = useMutation({
+  const updateAssistantExtensionsMutation = useMutation({
     mutationFn: ({
       assistantId,
       modeInjectionIds,
@@ -172,21 +172,81 @@ export function ExtensionPickerButton({
     onSuccess: () => setError(null),
   });
 
-  const buildPayload = (overrides: {
-    modeInjectionIds?: string[];
-    lorebookIds?: string[];
-    quickMessageIds?: string[];
-  }) => ({
-    assistantId: currentAssistant!.id,
-    modeInjectionIds:
-      overrides.modeInjectionIds ??
-      selectedModeInjectionIds.filter((id) => modeInjectionIdSet.has(id)),
-    lorebookIds:
-      overrides.lorebookIds ?? selectedLorebookIds.filter((id) => lorebookIdSet.has(id)),
-    quickMessageIds:
-      overrides.quickMessageIds ??
-      selectedQuickMessageIds.filter((id) => quickMessageIdSet.has(id)),
+  const updateConversationInjectionsMutation = useMutation({
+    mutationFn: ({
+      conversationId,
+      modeInjectionIds,
+      lorebookIds,
+    }: {
+      conversationId: string;
+      modeInjectionIds: string[];
+      lorebookIds: string[];
+      key: string;
+    }) =>
+      api.post<ConversationDto>(`conversations/${conversationId}/injections`, {
+        modeInjectionIds,
+        lorebookIds,
+      }),
+    onError: (updateError) => {
+      setError(extractErrorMessage(updateError, t("injection.update_failed")));
+    },
+    onSuccess: () => setError(null),
   });
+
+  const isUpdating =
+    updateAssistantExtensionsMutation.isPending || updateConversationInjectionsMutation.isPending;
+
+  const buildAssistantPayload = React.useCallback(
+    (overrides: {
+      modeInjectionIds?: string[];
+      lorebookIds?: string[];
+      quickMessageIds?: string[];
+    }) => ({
+      assistantId: currentAssistant!.id,
+      modeInjectionIds:
+        overrides.modeInjectionIds ??
+        assistantModeInjectionIds.filter((id) => modeInjectionIdSet.has(id)),
+      lorebookIds:
+        overrides.lorebookIds ?? assistantLorebookIds.filter((id) => lorebookIdSet.has(id)),
+      quickMessageIds:
+        overrides.quickMessageIds ??
+        selectedQuickMessageIds.filter((id) => quickMessageIdSet.has(id)),
+    }),
+    [
+      assistantLorebookIds,
+      assistantModeInjectionIds,
+      currentAssistant,
+      lorebookIdSet,
+      modeInjectionIdSet,
+      quickMessageIdSet,
+      selectedQuickMessageIds,
+    ],
+  );
+
+  const updatePromptInjections = React.useCallback(
+    (key: string, modeInjectionIds: string[], lorebookIds: string[]) => {
+      if (conversation) {
+        updateConversationInjectionsMutation.mutate({
+          conversationId: conversation.id,
+          modeInjectionIds,
+          lorebookIds,
+          key,
+        });
+        return;
+      }
+
+      updateAssistantExtensionsMutation.mutate({
+        ...buildAssistantPayload({ modeInjectionIds, lorebookIds }),
+        key,
+      });
+    },
+    [
+      buildAssistantPayload,
+      conversation,
+      updateAssistantExtensionsMutation,
+      updateConversationInjectionsMutation,
+    ],
+  );
 
   const handleToggleModeInjection = React.useCallback(
     (id: string, checked: boolean) => {
@@ -196,28 +256,44 @@ export function ExtensionPickerButton({
       );
       if (checked) nextIds.add(id);
       else nextIds.delete(id);
-      updateExtensionsMutation.mutate({
-        ...buildPayload({ modeInjectionIds: Array.from(nextIds) }),
-        key: `mode:${id}`,
-      });
+      updatePromptInjections(
+        `mode:${id}`,
+        Array.from(nextIds),
+        selectedLorebookIds.filter((item) => lorebookIdSet.has(item)),
+      );
     },
-    [canUse, currentAssistant, modeInjectionIdSet, selectedModeInjectionIds, updateExtensionsMutation],
+    [
+      canUse,
+      currentAssistant,
+      lorebookIdSet,
+      modeInjectionIdSet,
+      selectedLorebookIds,
+      selectedModeInjectionIds,
+      updatePromptInjections,
+    ],
   );
 
   const handleToggleLorebook = React.useCallback(
     (id: string, checked: boolean) => {
       if (!canUse || !currentAssistant) return;
-      const nextIds = new Set(
-        selectedLorebookIds.filter((item) => lorebookIdSet.has(item)),
-      );
+      const nextIds = new Set(selectedLorebookIds.filter((item) => lorebookIdSet.has(item)));
       if (checked) nextIds.add(id);
       else nextIds.delete(id);
-      updateExtensionsMutation.mutate({
-        ...buildPayload({ lorebookIds: Array.from(nextIds) }),
-        key: `lorebook:${id}`,
-      });
+      updatePromptInjections(
+        `lorebook:${id}`,
+        selectedModeInjectionIds.filter((item) => modeInjectionIdSet.has(item)),
+        Array.from(nextIds),
+      );
     },
-    [canUse, currentAssistant, lorebookIdSet, selectedLorebookIds, updateExtensionsMutation],
+    [
+      canUse,
+      currentAssistant,
+      lorebookIdSet,
+      modeInjectionIdSet,
+      selectedLorebookIds,
+      selectedModeInjectionIds,
+      updatePromptInjections,
+    ],
   );
 
   const handleToggleQuickMessage = React.useCallback(
@@ -228,12 +304,19 @@ export function ExtensionPickerButton({
       );
       if (checked) nextIds.add(id);
       else nextIds.delete(id);
-      updateExtensionsMutation.mutate({
-        ...buildPayload({ quickMessageIds: Array.from(nextIds) }),
+      updateAssistantExtensionsMutation.mutate({
+        ...buildAssistantPayload({ quickMessageIds: Array.from(nextIds) }),
         key: `quickmessage:${id}`,
       });
     },
-    [canUse, currentAssistant, quickMessageIdSet, selectedQuickMessageIds, updateExtensionsMutation],
+    [
+      buildAssistantPayload,
+      canUse,
+      currentAssistant,
+      quickMessageIdSet,
+      selectedQuickMessageIds,
+      updateAssistantExtensionsMutation,
+    ],
   );
 
   if (!hasData) {
@@ -245,16 +328,18 @@ export function ExtensionPickerButton({
       <PopoverTrigger asChild>
         <Button
           type="button"
+          aria-label={t("injection.title")}
+          title={t("injection.title")}
           variant="ghost"
           size="sm"
-          disabled={!canUse || updateExtensionsMutation.isPending}
+          disabled={!canUse || isUpdating}
           className={cn(
             "h-8 rounded-full px-2 text-muted-foreground hover:text-foreground",
             selectedCount > 0 && "text-primary hover:bg-primary/10",
             className,
           )}
         >
-          {updateExtensionsMutation.isPending ? (
+          {isUpdating ? (
             <LoaderCircle className="size-4 animate-spin" />
           ) : (
             <PackageIcon className="size-4" />
@@ -267,16 +352,13 @@ export function ExtensionPickerButton({
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[min(92vw,26rem)] gap-0 p-0">
-        <PopoverHeader className="border-b px-6 py-4">
-          <PopoverTitle>{t("injection.title")}</PopoverTitle>
-          <PopoverDescription>{t("injection.description")}</PopoverDescription>
-        </PopoverHeader>
+      <PopoverContent side="top" align="end" sideOffset={8} className="w-[min(92vw,20rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto space-y-3 p-4">
+        <PopoverTitle className="text-sm">{t("injection.title")}</PopoverTitle>
 
-        <div className="space-y-4 px-4 py-4">
+        <div className="space-y-3">
           <PickerErrorAlert error={error} />
 
-          <div className="bg-muted inline-flex rounded-full p-1">
+          <div className="bg-muted flex flex-wrap rounded-xl p-1">
             {quickMessages.length > 0 && (
               <button
                 type="button"
@@ -325,22 +407,23 @@ export function ExtensionPickerButton({
             </button>
           </div>
 
-          <ScrollArea className="h-[16rem] pr-3">
+          <div className="max-h-64 overflow-y-auto">
             {activeTab === "quickmessages" ? (
               quickMessages.length > 0 ? (
                 <div className="space-y-2">
                   {quickMessages.map((item) => {
                     const checked = selectedQuickMessageIds.includes(item.id);
                     const switching =
-                      updateExtensionsMutation.isPending &&
-                      updateExtensionsMutation.variables?.key === `quickmessage:${item.id}`;
+                      updateAssistantExtensionsMutation.isPending &&
+                      updateAssistantExtensionsMutation.variables?.key ===
+                        `quickmessage:${item.id}`;
 
                     return (
                       <label
                         key={item.id}
                         className={cn(
-                          "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
-                          checked && "border-primary bg-primary/5",
+                          "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-muted",
+                          checked && "bg-primary/5",
                         )}
                       >
                         {switching ? (
@@ -348,7 +431,7 @@ export function ExtensionPickerButton({
                         ) : (
                           <Checkbox
                             checked={checked}
-                            disabled={disabled || updateExtensionsMutation.isPending}
+                            disabled={disabled || isUpdating}
                             onCheckedChange={(nextChecked) => {
                               handleToggleQuickMessage(item.id, Boolean(nextChecked));
                             }}
@@ -358,7 +441,7 @@ export function ExtensionPickerButton({
                           <div className="truncate text-sm font-medium">
                             {getDisplayName(item.title, t("injection.unnamed_quickmessage"))}
                           </div>
-                          <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                          <div className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                             {item.content}
                           </div>
                         </div>
@@ -367,7 +450,7 @@ export function ExtensionPickerButton({
                   })}
                 </div>
               ) : (
-                <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                   {t("injection.empty_quickmessages")}
                 </div>
               )
@@ -377,15 +460,18 @@ export function ExtensionPickerButton({
                   {modeInjections.map((item) => {
                     const checked = selectedModeInjectionIds.includes(item.id);
                     const switching =
-                      updateExtensionsMutation.isPending &&
-                      updateExtensionsMutation.variables?.key === `mode:${item.id}`;
+                      conversation
+                        ? updateConversationInjectionsMutation.isPending &&
+                          updateConversationInjectionsMutation.variables?.key === `mode:${item.id}`
+                        : updateAssistantExtensionsMutation.isPending &&
+                          updateAssistantExtensionsMutation.variables?.key === `mode:${item.id}`;
 
                     return (
                       <label
                         key={item.id}
                         className={cn(
-                          "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
-                          checked && "border-primary bg-primary/5",
+                          "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-muted",
+                          checked && "bg-primary/5",
                         )}
                       >
                         {switching ? (
@@ -393,7 +479,7 @@ export function ExtensionPickerButton({
                         ) : (
                           <Checkbox
                             checked={checked}
-                            disabled={disabled || updateExtensionsMutation.isPending}
+                            disabled={disabled || isUpdating}
                             onCheckedChange={(nextChecked) => {
                               handleToggleModeInjection(item.id, Boolean(nextChecked));
                             }}
@@ -414,7 +500,7 @@ export function ExtensionPickerButton({
                   })}
                 </div>
               ) : (
-                <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                   {t("injection.empty_mode")}
                 </div>
               )
@@ -423,15 +509,19 @@ export function ExtensionPickerButton({
                 {lorebooks.map((item) => {
                   const checked = selectedLorebookIds.includes(item.id);
                   const switching =
-                    updateExtensionsMutation.isPending &&
-                    updateExtensionsMutation.variables?.key === `lorebook:${item.id}`;
+                    conversation
+                      ? updateConversationInjectionsMutation.isPending &&
+                        updateConversationInjectionsMutation.variables?.key ===
+                          `lorebook:${item.id}`
+                      : updateAssistantExtensionsMutation.isPending &&
+                        updateAssistantExtensionsMutation.variables?.key === `lorebook:${item.id}`;
 
                   return (
                     <label
                       key={item.id}
                       className={cn(
-                        "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
-                        checked && "border-primary bg-primary/5",
+                        "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-muted",
+                        checked && "bg-primary/5",
                       )}
                     >
                       {switching ? (
@@ -439,7 +529,7 @@ export function ExtensionPickerButton({
                       ) : (
                         <Checkbox
                           checked={checked}
-                          disabled={disabled || updateExtensionsMutation.isPending}
+                          disabled={disabled || isUpdating}
                           onCheckedChange={(nextChecked) => {
                             handleToggleLorebook(item.id, Boolean(nextChecked));
                           }}
@@ -451,7 +541,7 @@ export function ExtensionPickerButton({
                         </div>
                         {typeof item.description === "string" &&
                         item.description.trim().length > 0 ? (
-                          <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                          <div className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                             {item.description}
                           </div>
                         ) : null}
@@ -466,11 +556,11 @@ export function ExtensionPickerButton({
                 })}
               </div>
             ) : (
-              <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+              <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                 {t("injection.empty_lorebook")}
               </div>
             )}
-          </ScrollArea>
+          </div>
         </div>
       </PopoverContent>
     </Popover>

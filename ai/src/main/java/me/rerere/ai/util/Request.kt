@@ -1,12 +1,17 @@
 package me.rerere.ai.util
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.common.http.await
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
 import okhttp3.internal.http.RealResponseBody
@@ -19,6 +24,14 @@ fun List<CustomHeader>.toHeaders(): Headers {
                 add(it.name, it.value)
             }
     }.build()
+}
+
+// 提供商级别的请求头优先级最低，会被请求级别(助手/模型)的同名请求头覆盖
+fun ProviderSetting.mergeCustomHeaders(headers: List<CustomHeader> = emptyList()): Headers {
+    val providerHeaders = customHeaders.filter { header ->
+        headers.none { it.name.equals(header.name, ignoreCase = true) }
+    }
+    return (providerHeaders + headers).toHeaders()
 }
 
 fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
@@ -35,6 +48,26 @@ fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
         }
 
         else -> this
+    }
+}
+
+fun Request.Builder.configureSessionHeaders(url: String, sessionId: String?): Request.Builder = apply {
+    if (sessionId != null) {
+        header("X-Session-ID", sessionId)
+        if (url.toHttpUrl().host == "opencode.ai") {
+            header("x-opencode-session", sessionId)
+        }
+    }
+}
+
+/** 执行请求并读出响应体；不是 2xx 时报错，带上路径、状态码和响应体（不带 query，里面可能有 key） */
+internal suspend fun OkHttpClient.fetchBody(request: Request): String = withContext(Dispatchers.IO) {
+    newCall(request).await().use { response ->
+        val body = response.body.string()
+        if (!response.isSuccessful) {
+            error("Request to ${request.url.encodedPath} failed: ${response.code} $body")
+        }
+        body
     }
 }
 

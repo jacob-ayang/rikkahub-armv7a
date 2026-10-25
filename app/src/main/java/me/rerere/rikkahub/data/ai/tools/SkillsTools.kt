@@ -7,13 +7,16 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.files.SkillManager
-import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.skills.SkillFrontmatterParser
+import me.rerere.rikkahub.data.skills.SkillMetadata
+import me.rerere.rikkahub.data.skills.SkillPaths
+
+// 与 Agent Skills 规范的 description 上限一致
+private const val MAX_SKILL_DESCRIPTION_LENGTH = 1024
 
 fun createSkillTools(
     enabledSkills: Set<String>,
     allSkills: List<SkillMetadata>,
-    skillManager: SkillManager,
 ): List<Tool> {
     val available = allSkills.filter { it.name in enabledSkills }
     if (available.isEmpty()) return emptyList()
@@ -32,8 +35,9 @@ fun createSkillTools(
                     appendLine("<available_skills>")
                     available.forEach { skill ->
                         appendLine("  <skill>")
-                        appendLine("    <name>${skill.name}</name>")
-                        appendLine("    <description>${skill.description}</description>")
+                        // 技能可能来自第三方导入，转义并限长，防止 name/description 闭合标签注入任意系统提示
+                        appendLine("    <name>${skill.name.escapeXml()}</name>")
+                        appendLine("    <description>${skill.description.take(MAX_SKILL_DESCRIPTION_LENGTH).escapeXml()}</description>")
                         appendLine("  </skill>")
                     }
                     append("</available_skills>")
@@ -61,15 +65,15 @@ fun createSkillTools(
             execute = {
                 val name = it.jsonObject["name"]?.jsonPrimitive?.content
                     ?: error("name is required")
-                if (name !in enabledSkills) {
-                    error("Skill '$name' is not available. Available skills: ${enabledSkills.joinToString()}")
-                }
+                // 模型可能照抄系统提示中转义后的名称，两种形式都接受
+                val skill = available.firstOrNull { skill -> skill.name == name || skill.name.escapeXml() == name }
+                    ?: error("Skill '$name' is not available. Available skills: ${available.joinToString { it.name }}")
                 val path = it.jsonObject["path"]?.jsonPrimitive?.content
                 val content = if (path.isNullOrBlank()) {
-                    skillManager.readSkillBody(name)
-                        ?: error("Skill '$name' not found")
+                    require(skill.skillFile.exists()) { "Skill '$name' not found" }
+                    SkillFrontmatterParser.extractBody(skill.skillFile.readText())
                 } else {
-                    val target = skillManager.resolveSkillFile(name, path)
+                    val target = SkillPaths.resolveSkillFile(skill.skillDir, path)
                         ?: error("Path '$path' is outside the skill directory")
                     require(target.exists()) { "File '$path' not found in skill '$name'" }
                     target.readText()
@@ -78,4 +82,15 @@ fun createSkillTools(
             }
         )
     )
+}
+
+private fun String.escapeXml(): String = buildString(length) {
+    for (c in this@escapeXml) {
+        when (c) {
+            '&' -> append("&amp;")
+            '<' -> append("&lt;")
+            '>' -> append("&gt;")
+            else -> append(c)
+        }
+    }
 }

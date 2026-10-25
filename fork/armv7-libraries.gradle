@@ -1,0 +1,15 @@
+// Native library modules must use the same toolchain/ABI as the application.
+def forkNdkVersion = new groovy.json.JsonSlurper().parse(rootProject.file('fork/config.json')).ndk as String
+subprojects {
+    plugins.withId('com.android.library') {
+        android {
+            ndkVersion = forkNdkVersion
+            defaultConfig {
+                ndk {
+                    abiFilters.clear()
+                    abiFilters.add('armeabi-v7a')
+                }
+            }
+        }
+    }
+}

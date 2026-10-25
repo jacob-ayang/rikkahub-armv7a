@@ -3,14 +3,13 @@ package me.rerere.rikkahub.data.ai.transformers
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.utils.toLocalDateTime
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.time.toJavaInstant
-
-private const val TIME_GAP_THRESHOLD_SECONDS = 3600L // 1 小时
 
 /**
  * 时间提醒注入转换器
@@ -23,24 +22,34 @@ object TimeReminderTransformer : InputMessageTransformer {
         messages: List<UIMessage>,
     ): List<UIMessage> {
         if (!ctx.assistant.enableTimeReminder) return messages
-        return applyTimeReminder(messages)
+        return applyTimeReminder(messages, ctx.assistant.timeReminderIntervalMinutes)
     }
 }
 
-internal fun applyTimeReminder(messages: List<UIMessage>): List<UIMessage> {
+internal fun applyTimeReminder(
+    messages: List<UIMessage>,
+    intervalMinutes: Int = 60,
+): List<UIMessage> {
+    val thresholdSeconds = intervalMinutes.coerceAtLeast(1).toLong() * 60
     val result = mutableListOf<UIMessage>()
     val tz = TimeZone.currentSystemDefault()
 
+    var firstUserFound = false
     for (i in messages.indices) {
         val current = messages[i]
-        if (i > 0) {
-            val previous = messages[i - 1]
-            val prevInstant = previous.createdAt.toInstant(tz)
+        if (current.role == MessageRole.USER) {
             val currInstant = current.createdAt.toInstant(tz)
-            val gapSeconds = (currInstant - prevInstant).inWholeSeconds
+            if (!firstUserFound) {
+                firstUserFound = true
+                result.add(buildTimeReminderMessage(null, currInstant))
+            } else {
+                val previous = messages[i - 1]
+                val prevInstant = previous.createdAt.toInstant(tz)
+                val gapSeconds = (currInstant - prevInstant).inWholeSeconds
 
-            if (gapSeconds > TIME_GAP_THRESHOLD_SECONDS) {
-                result.add(buildTimeReminderMessage(gapSeconds, currInstant))
+                if (gapSeconds > thresholdSeconds) {
+                    result.add(buildTimeReminderMessage(gapSeconds, currInstant))
+                }
             }
         }
         result.add(current)
@@ -49,14 +58,18 @@ internal fun applyTimeReminder(messages: List<UIMessage>): List<UIMessage> {
     return result
 }
 
-private fun buildTimeReminderMessage(gapSeconds: Long, instant: Instant): UIMessage {
+private fun buildTimeReminderMessage(gapSeconds: Long?, instant: Instant): UIMessage {
     val javaInstant = instant.toJavaInstant()
     val dayOfWeek = javaInstant.atZone(ZoneId.systemDefault()).dayOfWeek
         .getDisplayName(TextStyle.FULL, Locale.getDefault())
     val timeStr = javaInstant.toLocalDateTime()
-    val gapText = formatGap(gapSeconds)
-    val content = "<time_reminder>Current time: $dayOfWeek, $timeStr ($gapText since last message)</time_reminder>"
-    return UIMessage.user(content)
+    val content = if (gapSeconds != null) {
+        val gapText = formatGap(gapSeconds)
+        "<time_reminder>Current time: $dayOfWeek, $timeStr ($gapText since last message)</time_reminder>"
+    } else {
+        "<time_reminder>Current time: $dayOfWeek, $timeStr</time_reminder>"
+    }
+    return UIMessage.user(content).copy(isSynthetic = true)
 }
 
 private fun formatGap(seconds: Long): String {

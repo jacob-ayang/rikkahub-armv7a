@@ -25,6 +25,8 @@
   "reasoning": {
     "title": "Reasoning",
     "description": "Configure reasoning intensity and budget for current assistant",
+    "faster": "Faster",
+    "smarter": "Smarter",
     "update_failed": "Failed to update reasoning budget",
     "custom_budget": "Custom reasoning budget",
     "custom_budget_placeholder": "Enter token budget",
@@ -53,6 +55,10 @@
         "description": "Use extensive reasoning to answer."
       },
       "xhigh": {
+        "label": "XHigh",
+        "description": "Use very high reasoning effort to answer."
+      },
+      "max": {
         "label": "Max",
         "description": "Use maximum reasoning to answer."
       }

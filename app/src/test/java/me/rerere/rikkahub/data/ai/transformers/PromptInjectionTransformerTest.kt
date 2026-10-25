@@ -17,10 +17,10 @@ class PromptInjectionTransformerTest {
     // region Helper functions
     private fun createAssistant(
         modeInjectionIds: Set<Uuid> = emptySet(),
-        lorebookIds: Set<Uuid> = emptySet()
+        lorebookIds: Set<Uuid> = emptySet(),
     ) = Assistant(
         modeInjectionIds = modeInjectionIds,
-        lorebookIds = lorebookIds
+        lorebookIds = lorebookIds,
     )
 
     private fun createModeInjection(
@@ -206,6 +206,7 @@ class PromptInjectionTransformerTest {
         )
 
         assertEquals(2, result.size)
+        assertTrue(result[0].isSynthetic)
         val systemText = getMessageText(result[0])
         assertTrue(systemText.startsWith("Original system prompt"))
         assertTrue(systemText.endsWith("Appended content"))
@@ -263,6 +264,7 @@ class PromptInjectionTransformerTest {
 
         assertEquals(3, result.size)
         assertEquals(MessageRole.SYSTEM, result[0].role)
+        assertTrue(result[0].isSynthetic)
         assertEquals("New system content", getMessageText(result[0]))
     }
     // endregion
@@ -294,6 +296,7 @@ class PromptInjectionTransformerTest {
         assertEquals(MessageRole.SYSTEM, result[0].role)
         assertEquals("System prompt", getMessageText(result[0]))
         assertEquals(MessageRole.USER, result[1].role)
+        assertTrue(result[1].isSynthetic)
         assertEquals("Top of chat content", getMessageText(result[1]))
         assertEquals(MessageRole.USER, result[2].role)
     }

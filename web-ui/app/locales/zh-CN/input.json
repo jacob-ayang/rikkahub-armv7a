@@ -25,6 +25,8 @@
   "reasoning": {
     "title": "推理",
     "description": "配置当前助手的推理强度和预算",
+    "faster": "更快",
+    "smarter": "更智能",
     "update_failed": "更新推理预算失败",
     "custom_budget": "自定义推理预算",
     "custom_budget_placeholder": "输入预算 token 数",
@@ -53,7 +55,11 @@
         "description": "模型将使用大量推理来回答问题。"
       },
       "xhigh": {
-        "label": "极限推理",
+        "label": "超高",
+        "description": "模型将使用超高推理强度来回答问题。"
+      },
+      "max": {
+        "label": "最大",
         "description": "模型将使用最大推理预算来回答问题。"
       }
     }
