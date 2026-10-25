@@ -1,10 +1,6 @@
 name: ARMv7 Build and Release
 
 on:
-  # Bootstrap the first signed test APK without requiring Actions API write access.
-  # Remove this branch-only trigger after the initial validation run succeeds.
-  push:
-    branches: [fix/armv7-automation]
   workflow_dispatch:
     inputs:
       upstream_tag:
@@ -56,7 +52,6 @@ jobs:
           REQUESTED_MODE: ${{ inputs.mode }}
           REQUESTED_SHA: ${{ inputs.upstream_sha }}
           REQUESTED_TAG: ${{ inputs.upstream_tag }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
           python3 - <<'PYCODE'
           import importlib.util, os
@@ -64,8 +59,6 @@ jobs:
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
           tag = os.environ['REQUESTED_TAG']
-          if os.environ['EVENT_NAME'] == 'push':
-              tag = module.config()['release_baseline']['tag']
           mode = os.environ['REQUESTED_MODE'] or ('release' if tag else 'sync')
           if mode not in ('sync', 'release') or (mode == 'release' and not tag):
               raise ValueError('Release mode requires an upstream official tag')
