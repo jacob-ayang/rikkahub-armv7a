@@ -90,17 +90,17 @@ class ReleaseLookupTest(unittest.TestCase):
     def test_pending_draft_is_found_when_tag_endpoint_returns_404(self):
         api = automation.GitHub()
         draft = dict(id=42, tag_name="3.1.1", draft=True)
-        with patch.object(api, "request", side_effect=[None, draft]) as request, \
-                patch.object(api, "pages", return_value=[draft]):
+        graph = dict(data=dict(repository=dict(release=dict(databaseId=42, isDraft=True))))
+        draft["tag_name"] = "untagged-test"
+        with patch.object(api, "request", side_effect=[None, graph, draft]) as request:
             self.assertEqual(api.release("3.1.1"), draft)
+            self.assertEqual(draft["tag_name"], "3.1.1")
             self.assertEqual(request.call_args.args, ("releases/42",))
 
-    def test_duplicate_pending_tags_fail_before_mutating_assets(self):
+    def test_graphql_failure_is_not_mistaken_for_missing_release(self):
         api = automation.GitHub()
-        with patch.object(api, "request", return_value=None), patch.object(api, "pages", return_value=[
-            dict(id=1, tag_name="3.1.1", draft=True), dict(id=2, tag_name="3.1.1", draft=True),
-        ]):
-            with self.assertRaisesRegex(RuntimeError, "Multiple drafts"):
+        with patch.object(api, "request", side_effect=[None, dict(errors=[dict(message="denied")])]):
+            with self.assertRaisesRegex(RuntimeError, "draft lookup failed"):
                 api.release("3.1.1")
 
 
@@ -168,15 +168,31 @@ class ManifestTest(unittest.TestCase):
 
 
 class GitSafetyTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.target = Path(self.temporary.name)
+        (self.target / automation.STATE).write_text('{"release_workflows_omitted":false}')
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_release_source_cannot_remove_master_workflows(self):
+        (self.target / automation.STATE).write_text('{"release_workflows_omitted":true}')
+        args = type("Args", (), dict(target=str(self.target), base_sha="a" * 40))()
+        with patch.object(automation, "git") as git:
+            with self.assertRaisesRegex(RuntimeError, "daily-sync"):
+                automation.advance(args)
+        git.assert_not_called()
+
     def test_master_race_prevents_push(self):
-        args = type("Args", (), dict(target="/tmp/candidate", base_sha="a" * 40))()
+        args = type("Args", (), dict(target=str(self.target), base_sha="a" * 40))()
         with patch.object(automation, "git", side_effect=["b" * 40, "", "c" * 40 + "\trefs/heads/master"]) as git:
             with self.assertRaisesRegex(RuntimeError, "master changed"):
                 automation.advance(args)
         self.assertFalse(any(call.args[0] == "push" for call in git.call_args_list))
 
     def test_update_is_normal_fast_forward_push(self):
-        args = type("Args", (), dict(target="/tmp/candidate", base_sha="a" * 40))()
+        args = type("Args", (), dict(target=str(self.target), base_sha="a" * 40))()
         with patch.object(automation, "git", side_effect=["b" * 40, "", "a" * 40 + "\trefs/heads/master", ""]) as git:
             automation.advance(args)
         self.assertEqual(git.call_args.args, ("push", "origin", "b" * 40 + ":refs/heads/master"))
@@ -371,7 +387,8 @@ class UploadRetryTest(unittest.TestCase):
     def test_rebuilt_draft_removes_obsolete_apk_before_uploading_completion_marker(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="new.apk")
+            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="new.apk",
+                            version_name="3.1.1", control_sha="c" * 40, min_sdk=26)
             for name, data in (("build-info.json", json.dumps(manifest)), ("SHA256SUMS", "checksums"), ("new.apk", "apk")):
                 (root / name).write_text(data)
             draft = dict(id=1, draft=True, upload_url="https://uploads.github.com/test{?name}",
@@ -384,6 +401,8 @@ class UploadRetryTest(unittest.TestCase):
                     patch.object(automation, "release_manifest", return_value=manifest):
                 automation.upload(args)
             calls = api.request.call_args_list
+            metadata = next(call.args[2] for call in calls if call.args[:2] == ("releases/1", "PATCH"))
+            self.assertIn("Source: `" + "b" * 40 + "`", metadata["body"])
             delete_index = next(i for i, call in enumerate(calls) if call.args == ("releases/assets/7", "DELETE"))
             uploads = [(i, call.args[0]) for i, call in enumerate(calls) if call.args[1:2] == ("POST",)]
             self.assertLess(delete_index, uploads[0][0])
@@ -392,7 +411,8 @@ class UploadRetryTest(unittest.TestCase):
     def test_upload_failure_leaves_no_completion_marker_and_retry_preserves_apk(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="test.apk")
+            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="test.apk",
+                            version_name="3.1.1", control_sha="c" * 40, min_sdk=26)
             (root / "build-info.json").write_text(json.dumps(manifest))
             (root / "SHA256SUMS").write_text("checksums")
             (root / "test.apk").write_bytes(b"apk")
@@ -423,7 +443,8 @@ class UploadRetryTest(unittest.TestCase):
     def test_published_apk_is_never_replaced_on_retry(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="test.apk")
+            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="test.apk",
+                            version_name="3.1.1", control_sha="c" * 40, min_sdk=26)
             (root / "build-info.json").write_text(json.dumps(manifest))
             (root / "test.apk").write_bytes(b"new apk")
             api = unittest.mock.Mock()

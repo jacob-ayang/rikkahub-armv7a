@@ -6,7 +6,8 @@
 - Master updates are normal fast-forward pushes with an explicit expected-base check.
 - Official releases build the exact upstream tag with the current owned fork overlay, even when
   development master is ahead of that tag. Successful source commits are retained at
-  `build/armv7/<full-sha>`; local release tags identify those commits.
+  `build/armv7/<full-sha>`; local release tags identify those commits. Release source snapshots
+  contain no workflow definitions, while their metadata records the immutable controller SHA.
 - Legacy `sync/upstream-*` PRs are no longer created or merged automatically. PR #17 is superseded.
 - Existing backup branches and old release tags are preserved and never used as automation inputs.
 - Upstream scheduled workflows are not enabled in this fork. Only the fork controller and reusable

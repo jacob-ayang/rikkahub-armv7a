@@ -13,6 +13,9 @@ upstream release. Release jobs are processed oldest first with concurrency one.
 Candidates contain a pristine upstream tree plus the owned paths listed in
 `scripts/ci/automation.py` and the checked adaptations in `scripts/ci/apply-overlay.py`.
 The candidate merge commit has both the previous fork master and upstream SHA as parents.
+Official release snapshots omit all workflow definitions; the immutable controller SHA identifies
+the build automation separately. This lets the release API use ordinary contents-write GITHUB_TOKEN
+permissions even when master workflows change before first-device approval.
 No normal Git merge conflict resolution or force push of master is needed. Only a successful
 signed build, unit tests, APK checks and exact base-SHA comparison allow master to advance.
 
@@ -54,7 +57,8 @@ Each APK is built from the exact upstream tag plus the controller overlay, indep
 current development master. Its source commit is retained under `build/armv7/<full-sha>`.
 
 The workflow creates a draft, uploads the APK, SHA256SUMS, and finally build-info.json.
-It checks the uploaded APK digest/size and provenance before allowing publication. A complete
+It checks the uploaded APK digest/size and provenance before allowing publication. Pending draft tags are resolved through GraphQL and read by REST release ID; updates always
+supply tag_name explicitly so they cannot become untagged drafts. A complete
 verified draft is reused on retry without rebuilding when its build inputs match.
 Changed app/native/toolchain adapters rebuild drafts; controller-only changes and device approval
 do not invalidate the tested APK. Incomplete drafts are repaired. Published
@@ -81,6 +85,8 @@ A successful stage closes only its own Issue.
 Public releases are initially disabled by `device_validation.approved: false`.
 Download the signed test APK from the workflow's `armv7a-release-*` artifact or the draft release.
 The artifact contains build-info.json and SHA256SUMS as well as the APK.
+
+The Chinese device checklist is [ARMV7_VALIDATION.md](ARMV7_VALIDATION.md).
 
 On an Android 8.0+ ARMv7 device, first install the existing 2.1.12 build and keep a separate backup.
 Then install the new APK as an upgrade and check:

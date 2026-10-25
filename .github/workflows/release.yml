@@ -69,6 +69,8 @@ jobs:
           mode = os.environ['REQUESTED_MODE'] or ('release' if tag else 'sync')
           if mode not in ('sync', 'release') or (mode == 'release' and not tag):
               raise ValueError('Release mode requires an upstream official tag')
+          if mode == 'sync' and tag:
+              raise ValueError('Daily sync cannot use a release tag or a release source tree')
           upstream = module.GitHub(module.config()['upstream'])
           if tag:
               release = upstream.release(tag)
@@ -222,6 +224,7 @@ jobs:
           BUILD: ${{ needs.build.result }}
           PUBLISH: ${{ needs.publish.result }}
           MODE: ${{ needs.resolve.outputs.mode }}
+          READY: ${{ needs.resolve.outputs.ready }}
           TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           if [ "$RESOLVE" != success ]; then
@@ -231,6 +234,8 @@ jobs:
           fi
           if [ "$BUILD" != skipped ]; then
             python3 scripts/ci/automation.py report --stage "${MODE:-unknown}-build-${TAG:-master}" --result "$BUILD"
+          elif [ "$READY" = true ]; then
+            python3 scripts/ci/automation.py report --stage "${MODE:-unknown}-build-${TAG:-master}" --result success
           fi
           if [ "$PUBLISH" != skipped ]; then
             python3 scripts/ci/automation.py report --stage "publish-$TAG" --result "$PUBLISH"

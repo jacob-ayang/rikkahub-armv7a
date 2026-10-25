@@ -70,6 +70,7 @@ class GitHub:
                     body = response.read()
                     return body if raw else json.loads(body) if body else None
             except urllib.error.HTTPError as error:
+                error.close()
                 if error.code == 404 and method == "GET":
                     return None
                 # Only reads are retried here. Retrying a mutation blindly can create
@@ -96,12 +97,22 @@ class GitHub:
         published = self.request("releases/tags/" + urllib.parse.quote(tag, safe=""))
         if published:
             return published
-        # The tag endpoint only promises published releases. Drafts must be
-        # discovered through authenticated listings, then fetched by ID.
-        drafts = [r for r in self.pages("releases") if r.get("draft") and r.get("tag_name") == tag]
-        if len(drafts) > 1:
-            raise RuntimeError(f"Multiple drafts use tag {tag}; resolve the ambiguity before retrying")
-        return self.request(f"releases/{drafts[0]['id']}") if drafts else None
+        # REST can expose an unpublished tag as "untagged-...". Like gh CLI,
+        # resolve the pending tag with GraphQL, then fetch complete assets by ID.
+        owner, repo = self.repository.split("/", 1)
+        result = self.request("https://api.github.com/graphql", "POST", {
+            "query": "query($owner:String!,$repo:String!,$tag:String!){repository(owner:$owner,name:$repo){release(tagName:$tag){databaseId isDraft}}}",
+            "variables": {"owner": owner, "repo": repo, "tag": tag},
+        })
+        if result.get("errors"):
+            raise RuntimeError("GitHub draft lookup failed")
+        node = (result.get("data", {}).get("repository") or {}).get("release")
+        if not node or not node["isDraft"]:
+            return None
+        draft = self.request(f"releases/{node['databaseId']}")
+        if draft:
+            draft["tag_name"] = tag
+        return draft
 
     def sha(self, ref):
         commit = self.request("commits/" + urllib.parse.quote(ref, safe=""))
@@ -270,6 +281,9 @@ def prepare(args):
 
 def advance(args):
     cfg = config()
+    state = json.loads((Path(args.target) / STATE).read_text())
+    if state.get("release_workflows_omitted") is not False:
+        raise RuntimeError("Only a daily-sync source candidate can advance master")
     sha = git("rev-parse", "HEAD", cwd=Path(args.target))
     git("fetch", str(Path(args.target).resolve()), sha, "--no-tags")
     # A normal push enforces ancestry. Also compare the exact expected base, so a
@@ -295,6 +309,18 @@ def status(args):
     output("ready", str(ready).lower())
 
 
+def release_description(manifest):
+    tag = manifest["tag"]
+    return {
+        "name": f"RikkaHub {manifest['version_name']} ARMv7a",
+        "body": f"ARMv7a build of [{tag}](https://github.com/{config()['upstream']}/releases/tag/{urllib.parse.quote(tag, safe='')}).\n\n"
+                f"Upstream: `{manifest['upstream_sha']}`\nSource: `{manifest['source_sha']}`\n"
+                f"Adapter: `{manifest['control_sha']}`\n\n"
+                f"Minimum Android API: {manifest['min_sdk']} (same as upstream). "
+                "SHA256SUMS and build-info.json document the exact APK and signing certificate.",
+    }
+
+
 def upload(args):
     api = GitHub()
     root = Path(args.directory)
@@ -308,11 +334,7 @@ def upload(args):
     if not release:
         release = api.request("releases", "POST", {
             "tag_name": args.tag, "target_commitish": manifest["source_sha"],
-            "name": f"RikkaHub {manifest['version_name']} ARMv7a", "draft": True, "prerelease": False,
-            "body": f"ARMv7a build of [{args.tag}](https://github.com/{config()['upstream']}/releases/tag/{urllib.parse.quote(args.tag, safe='')}).\n\n"
-                    f"Upstream: `{args.upstream_sha}`\nSource: `{manifest['source_sha']}`\n"
-                    f"Adapter: `{manifest['control_sha']}`\n\n"
-                    "Requires Android 8.0 or newer. SHA256SUMS and build-info.json document the exact APK and signing certificate."
+            "draft": True, "prerelease": False, **release_description(manifest),
         })
     elif release["draft"]:
         # Drafts can be retried with a newly prepared source commit. Keep their
@@ -320,7 +342,9 @@ def upload(args):
         tag_ref = api.request("git/ref/tags/" + urllib.parse.quote(args.tag, safe=""))
         if tag_ref and api.sha(args.tag) != manifest["source_sha"]:
             raise RuntimeError("Existing tag points at a different source; refusing to relabel it")
-        api.request(f"releases/{release['id']}", "PATCH", {"target_commitish": manifest["source_sha"]})
+        api.request(f"releases/{release['id']}", "PATCH", {
+            "tag_name": args.tag, "target_commitish": manifest["source_sha"], **release_description(manifest),
+        })
     assets = {a["name"]: a for a in release["assets"]}
     if release["draft"]:
         # A fresh candidate has a different SHA in its filename. Remove obsolete
@@ -377,7 +401,9 @@ def publish(args):
                                     GitHub(cfg["upstream"]).sha(cfg["release_baseline"]["tag"]))
     if not baseline_info or baseline_info["apk_sha256"] != baseline:
         raise RuntimeError("The tested baseline APK does not match the stored release")
-    api.request(f"releases/{release['id']}", "PATCH", {"draft": False, "make_latest": "legacy"})
+    api.request(f"releases/{release['id']}", "PATCH", {
+        "tag_name": args.tag, "draft": False, "make_latest": "legacy",
+    })
     output("awaiting_device", "false")
 
 
