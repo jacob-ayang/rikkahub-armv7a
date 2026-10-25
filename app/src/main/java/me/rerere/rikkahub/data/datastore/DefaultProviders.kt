@@ -8,11 +8,8 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
-import me.rerere.ai.provider.BalanceOption
-import me.rerere.ai.provider.Modality
-import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.QuotaQuery
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import kotlin.uuid.Uuid
@@ -20,27 +17,6 @@ import kotlin.uuid.Uuid
 val DEFAULT_AUTO_MODEL_ID = Uuid.parse("b7055fb4-39f9-4042-a88a-0d80ed76cf08")
 
 val DEFAULT_PROVIDERS = listOf(
-    ProviderSetting.OpenAI(
-        id = Uuid.parse("a8d2d463-e8c0-41f2-b89e-f5eb8e716cce"),
-        name = "RikkaHub",
-        baseUrl = "https://api.rikka-ai.com/v1",
-        apiKey = "",
-        enabled = true,
-        builtIn = true,
-        description = {
-            Text(stringResource(R.string.rikkahub_provider_description))
-        },
-        models = listOf(
-            Model(
-                id = DEFAULT_AUTO_MODEL_ID,
-                modelId = "auto",
-                displayName = "Auto",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING),
-            )
-        )
-    ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("1eeea727-9ee5-4cae-93e6-6fb01a4d051e"),
         name = "OpenAI",
@@ -90,6 +66,30 @@ val DEFAULT_PROVIDERS = listOf(
         },
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("2a05506f-3a59-450a-a493-33a82bc85a81"),
+        name = "APIMart",
+        baseUrl = "https://api.apimart.ai/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("APIMart 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 $0.006/张，1 美元可出图 160+ 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费。")
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://go.apimart.ai/gh-rikkahub")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("通过此注册链接注册即可开用")
+                        }
+                    }
+                }
+            )
+        },
+        shortDescription = {
+            Text("AI 图片/视频生成，GPT-Image-2 低至 $0.006/张")
+        },
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("56a94d29-c88b-41c5-8e09-38a7612d6cf8"),
         name = "硅基流动",
         baseUrl = "https://api.siliconflow.cn/v1",
@@ -103,11 +103,6 @@ val DEFAULT_PROVIDERS = listOf(
                 """.trimIndent()
             )
         },
-        balanceOption = BalanceOption(
-            enabled = true,
-            apiPath = "/user/info",
-            resultPath = "data.totalBalance",
-        ),
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("f099ad5b-ef03-446d-8e78-7e36787f780b"),
@@ -115,10 +110,23 @@ val DEFAULT_PROVIDERS = listOf(
         baseUrl = "https://api.deepseek.com/v1",
         apiKey = "",
         builtIn = true,
-        balanceOption = BalanceOption(
+        quotaQuery = QuotaQuery(
             enabled = true,
-            apiPath = "/user/balance",
+            url = "{{baseUrl}}/user/balance",
             resultPath = "balance_infos[0].total_balance"
+        )
+    ),
+    ProviderSetting.OpenAI(
+        id = Uuid.parse("d6c4d8c6-3f62-4ca9-a6f3-7ade6b15ecc3"),
+        name = "月之暗面",
+        baseUrl = "https://api.moonshot.cn/v1",
+        apiKey = "",
+        enabled = true,
+        builtIn = true,
+        quotaQuery = QuotaQuery(
+            enabled = true,
+            url = "{{baseUrl}}/users/me/balance",
+            resultPath = "data.available_balance"
         )
     ),
     ProviderSetting.OpenAI(
@@ -127,9 +135,9 @@ val DEFAULT_PROVIDERS = listOf(
         baseUrl = "https://openrouter.ai/api/v1",
         apiKey = "",
         builtIn = true,
-        balanceOption = BalanceOption(
+        quotaQuery = QuotaQuery(
             enabled = true,
-            apiPath = "/credits",
+            url = "{{baseUrl}}/credits",
             resultPath = "data.total_credits - data.total_usage",
         )
     ),
@@ -140,27 +148,11 @@ val DEFAULT_PROVIDERS = listOf(
         apiKey = "",
         enabled = false,
         builtIn = true,
-        balanceOption = BalanceOption(
+        quotaQuery = QuotaQuery(
             enabled = true,
-            apiPath = "/credits",
+            url = "{{baseUrl}}/credits",
             resultPath = "balance",
         )
-    ),
-    ProviderSetting.OpenAI(
-        id = Uuid.parse("da020a90-f7b3-4c29-b90e-c511a0630630"),
-        name = "小马算力",
-        baseUrl = "https://api.tokenpony.cn/v1",
-        apiKey = "",
-        enabled = false,
-        builtIn = true,
-        description = {
-            MarkdownBlock(
-                content = """
-                    小马算力是一家提供国产模型的API网关服务，使用统一接口接入多种模型
-                    官网: [tokenpony.cn](https://www.tokenpony.cn/79clb)
-                """.trimIndent()
-            )
-        }
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("f76cae46-069a-4334-ab8e-224e4979e58c"),
@@ -177,19 +169,6 @@ val DEFAULT_PROVIDERS = listOf(
         apiKey = "",
         enabled = false,
         builtIn = true
-    ),
-    ProviderSetting.OpenAI(
-        id = Uuid.parse("d6c4d8c6-3f62-4ca9-a6f3-7ade6b15ecc3"),
-        name = "月之暗面",
-        baseUrl = "https://api.moonshot.cn/v1",
-        apiKey = "",
-        enabled = false,
-        builtIn = true,
-        balanceOption = BalanceOption(
-            enabled = true,
-            apiPath = "/users/me/balance",
-            resultPath = "data.available_balance"
-        )
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("3bc40dc1-b11a-46fa-863b-6306971223be"),
@@ -230,7 +209,7 @@ val DEFAULT_PROVIDERS = listOf(
     ProviderSetting.OpenAI(
         id = Uuid.parse("ef5d149b-8e34-404b-818c-6ec242e5c3c5"),
         name = "腾讯Hunyuan",
-        baseUrl = "https://api.hunyuan.cloud.tencent.com/v1",
+        baseUrl = "https://tokenhub.tencentmaas.com/v1",
         apiKey = "",
         enabled = false,
         builtIn = true
@@ -245,46 +224,73 @@ val DEFAULT_PROVIDERS = listOf(
         useResponseApi = true,
     ),
     ProviderSetting.OpenAI(
-        id = Uuid.parse("53027b08-1b58-43d5-90ed-29173203e3d8"),
-        name = "AckAI",
-        baseUrl = "https://ackai.fun/v1",
+        id = Uuid.parse("aecf04fd-cb5c-4582-aed2-e8bf393923fd"),
+        name = "随想AI网关",
+        baseUrl = "https://sui-xiang.com/v1",
         apiKey = "",
         enabled = false,
         builtIn = true,
         description = {
             Text(
                 text = buildAnnotatedString {
-                    append(
-                        "所有AI大模型全都可以用！无需翻墙！价格是官方5折！\n" +
-                            "官网："
-                    )
-                    withLink(LinkAnnotation.Url("https://ackai.fun/register?aff=jxpP")) {
+                    append("可靠高效的 API 中继服务，提供 Claude、Codex、Gemini 等中继服务。注重隐私·无数据倒卖·无模型掺水，充值额度 1:1，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。\n")
+                    append("官网：")
+                    withLink(LinkAnnotation.Url("https://sui-xiang.com")) {
                         withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
-                            append("https://ackai.fun")
+                            append("https://sui-xiang.com")
                         }
                     }
                 }
             )
-        }
+        },
+        shortDescription = {
+            Text(
+                text = "Claude、Codex、Gemini 等中继服务，1:1 充值"
+            )
+        },
     ),
     ProviderSetting.OpenAI(
-        id = Uuid.parse("4da09554-8844-4cc8-a4a9-fe1b2515e91b"),
-        name = "UnifyLLM",
-        baseUrl = "https://apicn.unifyllm.top/v1",
+        id = Uuid.parse("afbc54ad-807e-4455-9594-7d7a546356ad"),
+        name = "MaruCode",
+        baseUrl = "https://api.muteki.site/v1",
         apiKey = "",
         enabled = false,
         builtIn = true,
         description = {
             Text(
                 text = buildAnnotatedString {
-                    append("一站式LLM API中转平台货源站\n官网：")
-                    withLink(LinkAnnotation.Url("https://www.unifyllm.com/")) {
+                    append("MaruCode 是一家偶尔做做慈善的小破站 API，自营号池，主要提供 Codex、Claude Code、GPT Image 等主流模型，支持 Websocket 协议，明码标价(Codex 0.25x, CC 1.5x)，透明汇率(1:1)。")
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub")) {
                         withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
-                            append("https://www.unifyllm.com/")
+                            append("新用户注册送 2 刀")
+                        }
+                    }
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://images-2.muteki.site")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("生图工作台🖼️")
                         }
                     }
                 }
             )
-        }
+        },
+        useResponseApi = true,
+    ),
+    ProviderSetting.Claude(
+        id = Uuid.parse("b4deabea-20fb-4101-a74c-65679c7e4754"),
+        name = "MiniMax",
+        baseUrl = "https://api.minimaxi.com/anthropic/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+    ),
+    ProviderSetting.OpenAI(
+        id = Uuid.parse("a2bafe83-eaf8-47bf-a8c7-3dd82d89f637"),
+        name = "MIMO",
+        baseUrl = "https://api.xiaomimimo.com/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
     ),
 )

@@ -2,520 +2,83 @@ name: Sync Upstream
 
 on:
   schedule:
-    - cron: "0 0 */3 * *"
+    - cron: "17 1,7,13,19 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
   issues: write
 
 concurrency:
-  group: sync-upstream
+  group: armv7-controller
   cancel-in-progress: false
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      sync: ${{ steps.plan.outputs.sync }}
+      upstream_sha: ${{ steps.plan.outputs.upstream_sha }}
+      base_sha: ${{ steps.plan.outputs.base_sha }}
+      releases: ${{ steps.plan.outputs.releases }}
+      has_releases: ${{ steps.plan.outputs.has_releases }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test automation
+        run: python3 -m unittest discover -s scripts/ci/tests -v
+      - name: Resolve immutable sources and unfinished releases
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/automation.py plan
+      - name: Report planning result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ job.status }}
+        run: python3 scripts/ci/automation.py report --stage planning --result "$RESULT"
+
   sync:
-    runs-on: ubuntu-latest
-    outputs:
-      has_new_commits: ${{ steps.compare.outputs.has_new_commits }}
-      has_new_upstream_release: ${{ steps.release_check.outputs.has_new_upstream_release }}
-      conflict_files: ${{ steps.merge.outputs.conflict_files }}
-      merge_conflict: ${{ steps.merge.outputs.merge_conflict }}
-      overlay_conflict: ${{ steps.merge.outputs.overlay_conflict }}
-      branch_updated: ${{ steps.merge.outputs.branch_updated }}
-      sync_branch: ${{ steps.merge.outputs.sync_branch }}
-      upstream_tag_raw: ${{ steps.upstream_release.outputs.tag }}
-      sync_pr_url: ${{ steps.sync_pr.outputs.url }}
+    needs: plan
+    if: needs.plan.outputs.sync == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      mode: sync
+      upstream_sha: ${{ needs.plan.outputs.upstream_sha }}
+      base_sha: ${{ needs.plan.outputs.base_sha }}
+    secrets: inherit
 
-    steps:
-      - name: Checkout master
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: master
+  releases:
+    needs: plan
+    if: needs.plan.outputs.has_releases == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.plan.outputs.releases) }}
+    uses: ./.github/workflows/release.yml
+    with:
+      mode: release
+      upstream_sha: ${{ matrix.sha }}
+      upstream_tag: ${{ matrix.tag }}
+    secrets: inherit
 
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Fetch upstream master (no tags)
-        run: |
-          git remote add upstream https://github.com/rikkahub/rikkahub.git 2>/dev/null || true
-          git fetch upstream master --no-tags --prune
-
-      - name: Compare master with upstream
-        id: compare
-        run: |
-          set -euo pipefail
-
-          LOCAL_SHA="$(git rev-parse master)"
-          UPSTREAM_SHA="$(git rev-parse upstream/master)"
-          COUNTS="$(git rev-list --left-right --count master...upstream/master)"
-          LOCAL_AHEAD="$(echo "$COUNTS" | awk '{print $1}')"
-          UPSTREAM_AHEAD="$(echo "$COUNTS" | awk '{print $2}')"
-
-          HAS_NEW_COMMITS="false"
-          if [ "${UPSTREAM_AHEAD}" -gt 0 ]; then
-            HAS_NEW_COMMITS="true"
-          fi
-
-          echo "local_sha=$LOCAL_SHA" >> "$GITHUB_OUTPUT"
-          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
-          echo "local_ahead=$LOCAL_AHEAD" >> "$GITHUB_OUTPUT"
-          echo "upstream_ahead=$UPSTREAM_AHEAD" >> "$GITHUB_OUTPUT"
-          echo "has_new_commits=$HAS_NEW_COMMITS" >> "$GITHUB_OUTPUT"
-
-      - name: Get latest upstream release tag
-        id: upstream_release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              const release = await github.rest.repos.getLatestRelease({
-                owner: "rikkahub",
-                repo: "rikkahub",
-              });
-              core.setOutput("tag", release.data.tag_name || "");
-              core.setOutput("published_at", release.data.published_at || "");
-            } catch (error) {
-              if (error.status === 404) {
-                core.setOutput("tag", "");
-                core.setOutput("published_at", "");
-                return;
-              }
-              throw error;
-            }
-
-      - name: Check whether local release already exists
-        id: local_release
-        uses: actions/github-script@v7
-        env:
-          UPSTREAM_TAG: ${{ steps.upstream_release.outputs.tag }}
-        with:
-          script: |
-            const tag = process.env.UPSTREAM_TAG || "";
-            if (!tag) {
-              core.setOutput("exists", "false");
-              return;
-            }
-            try {
-              await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag,
-              });
-              core.setOutput("exists", "true");
-            } catch (error) {
-              if (error.status === 404) {
-                core.setOutput("exists", "false");
-                return;
-              }
-              throw error;
-            }
-
-      - name: Evaluate upstream release state
-        id: release_check
-        run: |
-          set -euo pipefail
-
-          HAS_NEW_UPSTREAM_RELEASE="false"
-          UPSTREAM_TAG="${{ steps.upstream_release.outputs.tag }}"
-          LOCAL_RELEASE_EXISTS="${{ steps.local_release.outputs.exists }}"
-
-          if [ -n "$UPSTREAM_TAG" ] && [ "$LOCAL_RELEASE_EXISTS" != "true" ]; then
-            HAS_NEW_UPSTREAM_RELEASE="true"
-          fi
-
-          echo "has_new_upstream_release=$HAS_NEW_UPSTREAM_RELEASE" >> "$GITHUB_OUTPUT"
-
-      - name: Find existing upstream sync PR
-        if: steps.compare.outputs.has_new_commits == 'true'
-        id: find_pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pulls = await github.paginate(github.rest.pulls.list, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: "open",
-              base: "master",
-              per_page: 100,
-            });
-
-            const existing = pulls.find((pr) => {
-              const sameRepo = pr.head?.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
-              const syncBranch = pr.head?.ref?.startsWith("sync/upstream-");
-              return sameRepo && syncBranch;
-            });
-
-            if (existing) {
-              core.setOutput("number", String(existing.number));
-              core.setOutput("branch", existing.head.ref);
-            } else {
-              core.setOutput("number", "");
-              core.setOutput("branch", "");
-            }
-
-      - name: Prepare sync branch from upstream and apply fork overlay
-        if: steps.compare.outputs.has_new_commits == 'true'
-        id: merge
-        run: |
-          set -euo pipefail
-
-          UPSTREAM_SHA="${{ steps.compare.outputs.upstream_sha }}"
-          LOCAL_SHA="${{ steps.compare.outputs.local_sha }}"
-          EXISTING_BRANCH="${{ steps.find_pr.outputs.branch }}"
-          FORK_ONLY_PATHS=(
-            ".github/workflows/release.yml"
-            ".github/workflows/armv7-abi-sanity.yml"
-            ".github/workflows/armv7-smoke-check.yml"
-            "docs/native/libsimple.md"
-            "app/src/main/jniLibs"
-            "app/libs/ucrop-2.2.11-native.aar"
-          )
-
-          if [ -n "$EXISTING_BRANCH" ]; then
-            SYNC_BRANCH="$EXISTING_BRANCH"
-          else
-            SYNC_BRANCH="sync/upstream-$(date -u +'%Y%m%d-%H%M')-${UPSTREAM_SHA:0:7}"
-          fi
-
-          if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1; then
-            git fetch origin "$SYNC_BRANCH"
-            git checkout -B "$SYNC_BRANCH" "origin/$SYNC_BRANCH"
-          else
-            git checkout -B "$SYNC_BRANCH" master
-          fi
-
-          BEFORE_SHA="$(git rev-parse HEAD)"
-
-          set +e
-          git merge --no-ff --no-edit upstream/master
-          MERGE_EXIT="$?"
-          set -e
-
-          if [ "$MERGE_EXIT" -ne 0 ]; then
-            if git ls-files -u | grep -q '.'; then
-              CONFLICT_FILES="$(git diff --name-only --diff-filter=U | paste -sd ',' -)"
-              git merge --abort || true
-              echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
-              echo "merge_conflict=true" >> "$GITHUB_OUTPUT"
-              echo "overlay_conflict=false" >> "$GITHUB_OUTPUT"
-              echo "branch_updated=false" >> "$GITHUB_OUTPUT"
-              echo "conflict_files=$CONFLICT_FILES" >> "$GITHUB_OUTPUT"
-              echo "ERROR: Git merge conflicts detected between master and upstream/master"
-              exit 1
-            fi
-            exit "$MERGE_EXIT"
-          fi
-
-          for path in "${FORK_ONLY_PATHS[@]}"; do
-            git checkout "$LOCAL_SHA" -- "$path"
-          done
-
-          CONFLICT_FILES=()
-
-          if [ ! -f 'app/src/main/jniLibs/armeabi-v7a/libsimple.so' ]; then
-            CONFLICT_FILES+=("app/src/main/jniLibs/armeabi-v7a/libsimple.so")
-          fi
-
-          if ! grep -q 'flavorDimensions += "arch"' app/build.gradle.kts; then
-            CONFLICT_FILES+=("app/build.gradle.kts")
-          fi
-
-          if ! grep -q 'create("armv7")' app/build.gradle.kts; then
-            CONFLICT_FILES+=("app/build.gradle.kts")
-          fi
-
-          if ! grep -q 'assembleArmv7Release' app/build.gradle.kts; then
-            CONFLICT_FILES+=("app/build.gradle.kts")
-          fi
-
-          if ! grep -q 'rootProject.file(storeFilePath)' app/build.gradle.kts; then
-            CONFLICT_FILES+=("app/build.gradle.kts")
-          fi
-
-          if ! grep -q 'ensureMessageFtsTokenizer' app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt; then
-            CONFLICT_FILES+=("app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt")
-          fi
-
-          if [ "${#CONFLICT_FILES[@]}" -gt 0 ]; then
-            CONFLICT_FILES_JOINED="$(printf '%s\n' "${CONFLICT_FILES[@]}" | awk '!seen[$0]++' | paste -sd ',' -)"
-            echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
-            echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
-            echo "overlay_conflict=true" >> "$GITHUB_OUTPUT"
-            echo "branch_updated=false" >> "$GITHUB_OUTPUT"
-            echo "conflict_files=$CONFLICT_FILES_JOINED" >> "$GITHUB_OUTPUT"
-            echo "ERROR: Fork overlay application failed after clean merge"
-            exit 1
-          fi
-
-          git add \
-            app/build.gradle.kts \
-            app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt \
-            "${FORK_ONLY_PATHS[@]}"
-
-          if git diff --cached --quiet; then
-            BRANCH_UPDATED="false"
-          else
-            git commit -m "chore: sync upstream (${UPSTREAM_SHA:0:7})"
-            BRANCH_UPDATED="true"
-          fi
-
-          if [ -n "$SYNC_BRANCH" ]; then
-            git push origin "$SYNC_BRANCH" --force-with-lease
-          fi
-
-          echo "sync_branch=$SYNC_BRANCH" >> "$GITHUB_OUTPUT"
-          echo "merge_conflict=false" >> "$GITHUB_OUTPUT"
-          echo "overlay_conflict=false" >> "$GITHUB_OUTPUT"
-          echo "branch_updated=$BRANCH_UPDATED" >> "$GITHUB_OUTPUT"
-          echo "conflict_files=" >> "$GITHUB_OUTPUT"
-
-      - name: Create or update conflict issue
-        if: always() && (steps.merge.outputs.merge_conflict == 'true' || steps.merge.outputs.overlay_conflict == 'true')
-        uses: actions/github-script@v7
-        env:
-          LOCAL_SHA: ${{ steps.compare.outputs.local_sha }}
-          UPSTREAM_SHA: ${{ steps.compare.outputs.upstream_sha }}
-          CONFLICT_FILES: ${{ steps.merge.outputs.conflict_files }}
-          MERGE_CONFLICT: ${{ steps.merge.outputs.merge_conflict }}
-          OVERLAY_CONFLICT: ${{ steps.merge.outputs.overlay_conflict }}
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const label = "upstream-sync";
-            const issueTitle = "chore: upstream sync conflict";
-            const localSha = process.env.LOCAL_SHA || "";
-            const upstreamSha = process.env.UPSTREAM_SHA || "";
-            const mergeConflict = process.env.MERGE_CONFLICT === "true";
-            const overlayConflict = process.env.OVERLAY_CONFLICT === "true";
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const conflictFiles = (process.env.CONFLICT_FILES || "")
-              .split(",")
-              .map((item) => item.trim())
-              .filter(Boolean);
-
-            const failureType = mergeConflict
-              ? "Git merge conflict"
-              : overlayConflict
-                ? "ARMv7 overlay validation failure"
-                : "Unknown";
-
-            const filesBlock = conflictFiles.length
-              ? conflictFiles.map((file) => `- \`${file}\``).join("\n")
-              : "- (unknown)";
-
-            const body = [
-              "## Upstream Sync Conflict",
-              "",
-              `- Local master: \`${localSha}\``,
-              `- Upstream master: \`${upstreamSha}\``,
-              `- Failure Type: ${failureType}`,
-              `- Workflow run: ${runUrl}`,
-              "",
-              "### Conflict Files",
-              filesBlock,
-              "",
-              "_This issue is maintained automatically by the sync workflow._",
-            ].join("\n");
-
-            try {
-              await github.rest.repos.createLabel({
-                owner,
-                repo,
-                name: label,
-                color: "b60205",
-                description: "Upstream synchronization status and conflicts",
-              });
-            } catch (error) {
-              if (error.status !== 422) {
-                throw error;
-              }
-            }
-
-            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
-              owner,
-              repo,
-              state: "open",
-              labels: label,
-              per_page: 100,
-            });
-
-            const existing = openIssues.find((item) => !item.pull_request && item.title === issueTitle);
-            if (existing) {
-              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
-            } else {
-              await github.rest.issues.create({ owner, repo, title: issueTitle, body, labels: [label] });
-            }
-
-      - name: Close resolved conflict issue
-        if: always() && steps.merge.outputs.merge_conflict != 'true' && steps.merge.outputs.overlay_conflict != 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const label = "upstream-sync";
-            const issueTitle = "chore: upstream sync conflict";
-
-            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
-              owner,
-              repo,
-              state: "open",
-              labels: label,
-              per_page: 100,
-            });
-
-            const existing = openIssues.find((item) => !item.pull_request && item.title === issueTitle);
-            if (existing) {
-              await github.rest.issues.update({ owner, repo, issue_number: existing.number, state: "closed" });
-            }
-
-      - name: Create or update sync PR
-        if: steps.compare.outputs.has_new_commits == 'true' && steps.merge.outputs.merge_conflict != 'true' && steps.merge.outputs.overlay_conflict != 'true' && steps.merge.outputs.sync_branch != ''
-        id: sync_pr
-        uses: actions/github-script@v7
-        env:
-          SYNC_BRANCH: ${{ steps.merge.outputs.sync_branch }}
-          UPSTREAM_SHA: ${{ steps.compare.outputs.upstream_sha }}
-          LOCAL_SHA: ${{ steps.compare.outputs.local_sha }}
-        with:
-          script: |
-            const branch = process.env.SYNC_BRANCH;
-            const upstreamSha = process.env.UPSTREAM_SHA;
-            const localSha = process.env.LOCAL_SHA;
-
-            const title = `chore: sync upstream (${upstreamSha.slice(0, 7)})`;
-            const body = [
-              "## Upstream Sync",
-              "",
-              `- Local master: \`${localSha}\``,
-              `- Upstream master: \`${upstreamSha}\``,
-              "",
-              "This PR is created by the automated sync workflow.",
-            ].join("\n");
-
-            const pulls = await github.paginate(github.rest.pulls.list, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: "open",
-              base: "master",
-              per_page: 100,
-            });
-
-            let pr = pulls.find((item) => item.head?.ref === branch);
-            if (!pr) {
-              const created = await github.rest.pulls.create({ owner: context.repo.owner, repo: context.repo.repo, base: "master", head: branch, title, body });
-              pr = created.data;
-            } else {
-              await github.rest.pulls.update({ owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number, title, body });
-            }
-
-            try {
-              await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, labels: ["upstream-sync"] });
-            } catch (error) {
-              if (error.status !== 404 && error.status !== 422) {
-                throw error;
-              }
-            }
-
-            core.setOutput("number", String(pr.number));
-            core.setOutput("url", pr.html_url);
-
-  release-gate:
-    needs: sync
+  summary:
+    needs: [plan, sync, releases]
     if: always()
-    runs-on: ubuntu-latest
-    outputs:
-      should_trigger_release: ${{ steps.decide.outputs.should_trigger_release }}
-      release_mode: ${{ steps.decide.outputs.release_mode }}
-      source_ref: ${{ steps.decide.outputs.source_ref }}
-      upstream_tag: ${{ steps.decide.outputs.upstream_tag }}
+    runs-on: ubuntu-24.04
     steps:
-      - name: Decide whether to trigger release workflow
-        id: decide
-        run: |
-          set -euo pipefail
-
-          HAS_NEW_COMMITS="${{ needs.sync.outputs.has_new_commits }}"
-          HAS_NEW_UPSTREAM_RELEASE="${{ needs.sync.outputs.has_new_upstream_release }}"
-          MERGE_CONFLICT="${{ needs.sync.outputs.merge_conflict }}"
-          OVERLAY_CONFLICT="${{ needs.sync.outputs.overlay_conflict }}"
-          BRANCH_UPDATED="${{ needs.sync.outputs.branch_updated }}"
-          SYNC_BRANCH="${{ needs.sync.outputs.sync_branch }}"
-          UPSTREAM_TAG="${{ needs.sync.outputs.upstream_tag_raw }}"
-
-          SHOULD_TRIGGER_RELEASE="false"
-          RELEASE_MODE=""
-          SOURCE_REF=""
-          FINAL_UPSTREAM_TAG=""
-
-          if [ "$HAS_NEW_UPSTREAM_RELEASE" = "true" ]; then
-            if [ "$HAS_NEW_COMMITS" = "true" ] && { [ "$MERGE_CONFLICT" = "true" ] || [ "$OVERLAY_CONFLICT" = "true" ]; }; then
-              echo "ERROR: Sync validation failed, stop automatic release."
-              exit 1
-            fi
-            SHOULD_TRIGGER_RELEASE="true"
-            RELEASE_MODE="release"
-            FINAL_UPSTREAM_TAG="$UPSTREAM_TAG"
-            if [ -n "$SYNC_BRANCH" ]; then
-              SOURCE_REF="$SYNC_BRANCH"
-            else
-              SOURCE_REF="master"
-            fi
-          elif [ "$HAS_NEW_COMMITS" = "true" ]; then
-            if [ "$MERGE_CONFLICT" = "true" ] || [ "$OVERLAY_CONFLICT" = "true" ]; then
-              echo "ERROR: Sync validation failed, stop automatic prerelease."
-              exit 1
-            fi
-            if [ "$BRANCH_UPDATED" = "true" ] && [ -n "$SYNC_BRANCH" ]; then
-              SHOULD_TRIGGER_RELEASE="true"
-              RELEASE_MODE="prerelease"
-              SOURCE_REF="$SYNC_BRANCH"
-            fi
-          fi
-
-          echo "should_trigger_release=$SHOULD_TRIGGER_RELEASE" >> "$GITHUB_OUTPUT"
-          echo "release_mode=$RELEASE_MODE" >> "$GITHUB_OUTPUT"
-          echo "source_ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
-          echo "upstream_tag=$FINAL_UPSTREAM_TAG" >> "$GITHUB_OUTPUT"
-
-  publish-summary:
-    needs: [sync, release-gate]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Publish sync summary
+      - name: Summarize independent synchronization and releases
+        env:
+          PLAN: ${{ needs.plan.result }}
+          SYNC: ${{ needs.sync.result }}
+          RELEASES: ${{ needs.releases.result }}
+          UPSTREAM_SHA: ${{ needs.plan.outputs.upstream_sha }}
         run: |
           {
-            echo "## Upstream Sync Summary"
-            echo ""
-            echo "| Item | Value |"
-            echo "|---|---|"
-            echo "| New Commits | \`${{ needs.sync.outputs.has_new_commits }}\` |"
-            echo "| New Upstream Release | \`${{ needs.sync.outputs.has_new_upstream_release }}\` |"
-            echo "| Sync Branch | \`${{ needs.sync.outputs.sync_branch }}\` |"
-            echo "| Conflict Files | \`${{ needs.sync.outputs.conflict_files }}\` |"
-            echo "| Sync PR | \`${{ needs.sync.outputs.sync_pr_url }}\` |"
-            echo "| Trigger Release | \`${{ needs.release-gate.outputs.should_trigger_release }}\` |"
-            echo "| Release Mode | \`${{ needs.release-gate.outputs.release_mode }}\` |"
-            echo "| Release Source Ref | \`${{ needs.release-gate.outputs.source_ref }}\` |"
-            echo "| Upstream Tag | \`${{ needs.release-gate.outputs.upstream_tag || needs.sync.outputs.upstream_tag_raw }}\` |"
+            echo '## ARMv7a automation'
+            echo "Planning: $PLAN"
+            echo "Daily synchronization: $SYNC"
+            echo "Official releases: $RELEASES"
+            echo "Upstream SHA: $UPSTREAM_SHA"
+            echo 'First-device validation is controlled by fork/config.json; unapproved releases remain drafts.'
           } >> "$GITHUB_STEP_SUMMARY"
-
-  trigger-release:
-    needs: [sync, release-gate]
-    if: needs.release-gate.outputs.should_trigger_release == 'true'
-    uses: ./.github/workflows/release.yml
-    permissions:
-      contents: write
-      pull-requests: read
-    with:
-      source_ref: ${{ needs.release-gate.outputs.source_ref }}
-      release_mode: ${{ needs.release-gate.outputs.release_mode }}
-      upstream_tag: ${{ needs.release-gate.outputs.upstream_tag }}
-    secrets: inherit

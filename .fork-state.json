@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "upstream_sha": "ad2c4430d50ba52392b2941367f98ef59614cb73",
+  "overlay_sha256": "49be4f11b379f33ae7a74966ee31e18a8165bf0dcc2076d01760297024191c50",
+  "build_overlay_sha256": "798f1c2e37f7f484d23f935f59b3be1126d145a92f46eed509073738c4264cc8",
+  "control_sha": "46ef88b3dd8dd8acdbd895313c6218e35b15ddfa",
+  "checked_at": "2026-10-25T03:46:14.136709+00:00"
+}

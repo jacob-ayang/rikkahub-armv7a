@@ -5,31 +5,32 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
-import me.rerere.ai.ui.ImageAspectRatio
-import me.rerere.ai.ui.ImageGenerationResult
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.ui.ImageGenSize
+import me.rerere.ai.ui.ImageGenerationItem
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
+import kotlin.uuid.Uuid
 
 // 提供商实现
 // 采用无状态设计，使用时除了需要传入需要的参数外，还需要传入provider setting作为参数
 interface Provider<T : ProviderSetting> {
     suspend fun listModels(providerSetting: T): List<Model>
 
-    suspend fun getBalance(providerSetting: T): String {
-        return "TODO"
-    }
+    /** 查询额度，见 [ProviderQuota]。不支持或没有开启时返回 null */
+    suspend fun getQuota(providerSetting: T): ProviderQuota? = null
 
     suspend fun generateText(
         providerSetting: T,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk
+    ): TextGenerationResult
 
     suspend fun streamText(
         providerSetting: T,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk>
+    ): Flow<StreamChunk>
 
     suspend fun generateEmbedding(
         providerSetting: T,
@@ -41,8 +42,26 @@ interface Provider<T : ProviderSetting> {
     suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams,
-    ): ImageGenerationResult
+    ): Flow<ImageGenerationItem> {
+        error("Image generation is not supported")
+    }
+
+    suspend fun editImage(
+        providerSetting: ProviderSetting,
+        params: ImageEditParams,
+    ): Flow<ImageGenerationItem> {
+        error("Image edit is not supported")
+    }
 }
+
+@Serializable
+data class TextGenerationResult(
+    val id: String,
+    val model: String,
+    val message: UIMessage,
+    val finishReason: String? = null,
+    val usage: TokenUsage? = null,
+)
 
 @Serializable
 data class TextGenerationParams(
@@ -54,6 +73,7 @@ data class TextGenerationParams(
     val reasoningLevel: ReasoningLevel = ReasoningLevel.OFF,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
+    val sessionId: String? = Uuid.random().toString(),
 )
 
 @Serializable
@@ -61,7 +81,20 @@ data class ImageGenerationParams(
     val model: Model,
     val prompt: String,
     val numOfImages: Int = 1,
-    val aspectRatio: ImageAspectRatio = ImageAspectRatio.SQUARE,
+    val size: String = ImageGenSize.AUTO.value,
+    val partialImages: Int = 2,
+    val customHeaders: List<CustomHeader> = emptyList(),
+    val customBody: List<CustomBody> = emptyList(),
+)
+
+@Serializable
+data class ImageEditParams(
+    val model: Model,
+    val prompt: String,
+    val images: List<String>,
+    val numOfImages: Int = 1,
+    val size: String = ImageGenSize.AUTO.value,
+    val partialImages: Int = 2,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBody: List<CustomBody> = emptyList(),
 )

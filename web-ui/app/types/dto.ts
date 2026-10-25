@@ -1,5 +1,7 @@
 import type { TokenUsage } from "./core";
 import type { UIMessageAnnotation } from "./annotations";
+import type { ConversationConfig } from "./conversation";
+import type { ModelSnapshot } from "./message";
 import type { UIMessagePart } from "./parts";
 
 export interface ConversationListDto {
@@ -7,9 +9,31 @@ export interface ConversationListDto {
   assistantId: string;
   title: string;
   isPinned: boolean;
+  folderId?: string | null;
   createAt: number;
   updateAt: number;
   isGenerating: boolean;
+}
+
+/**
+ * Folder (conversation grouping within an assistant)
+ * @see app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt - FolderDto
+ */
+export interface FolderDto {
+  id: string;
+  assistantId: string;
+  name: string;
+  sortIndex: number;
+  createAt: number;
+}
+
+/**
+ * Folder list change event (pushed on the shared `/api/events` stream)
+ * @see app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt - FolderListEvent
+ */
+export interface FolderListEventDto {
+  assistantId: string;
+  folders: FolderDto[];
 }
 
 export interface PagedResult<T> {
@@ -48,8 +72,13 @@ export interface MessageDto {
   createdAt: string;
   finishedAt?: string | null;
   modelId?: string | null;
+  modelSnapshot?: ModelSnapshot | null;
   usage?: TokenUsage | null;
+  /** 模型实际生成耗时（毫秒），不含首 token 延迟、工具执行和审批等待 */
+  generationTimeMs?: number | null;
   translation?: string | null;
+  /** 压缩检查点：此消息是它之前全部历史的摘要，之前的消息不再发送给模型 */
+  isContextCheckpoint?: boolean;
 }
 
 export interface MessageNodeDto {
@@ -63,9 +92,14 @@ export interface ConversationDto {
   assistantId: string;
   title: string;
   messages: MessageNodeDto[];
-  truncateIndex: number;
   chatSuggestions: string[];
   isPinned: boolean;
+  customSystemPrompt?: string | null;
+  modeInjectionIds?: string[];
+  lorebookIds?: string[];
+  config?: ConversationConfig | null;
+  workspaceCwd?: string | null;
+  folderId?: string | null;
   createAt: number;
   updateAt: number;
   isGenerating: boolean;

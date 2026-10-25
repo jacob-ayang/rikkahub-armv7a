@@ -13,6 +13,7 @@ class TransformerContext(
     val assistant: Assistant,
     val settings: Settings,
     val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+    val workspaceCwd: String? = null,
 )
 
 interface MessageTransformer {
@@ -64,8 +65,16 @@ suspend fun List<UIMessage>.transforms(
     assistant: Assistant,
     settings: Settings,
     processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+    workspaceCwd: String? = null,
 ): List<UIMessage> {
-    val ctx = TransformerContext(context, model, assistant, settings, processingStatus)
+    val ctx = TransformerContext(
+        context = context,
+        model = model,
+        assistant = assistant,
+        settings = settings,
+        processingStatus = processingStatus,
+        workspaceCwd = workspaceCwd,
+    )
     return transformers.fold(this) { acc, transformer ->
         transformer.transform(ctx, acc)
     }

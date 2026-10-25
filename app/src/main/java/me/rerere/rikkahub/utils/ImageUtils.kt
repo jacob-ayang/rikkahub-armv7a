@@ -15,6 +15,7 @@ import com.google.zxing.BinaryBitmap
 import com.google.zxing.MultiFormatReader
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
+import java.io.File
 
 /**
  * 图片处理工具类
@@ -221,7 +222,9 @@ object ImageUtils {
                     height = options.outHeight,
                     mimeType = options.outMimeType
                 )
-            } else null
+            } else {
+                null
+            }
         }.onFailure {
             it.printStackTrace()
         }.getOrNull()
@@ -237,12 +240,16 @@ object ImageUtils {
     fun getTavernCharacterMeta(context: Context, uri: Uri): Result<String> = runCatching {
         val metadata = context.contentResolver.openInputStream(uri)?.use { ImageMetadataReader.readMetadata(it) }
         if (metadata == null) error("Metadata is null, please check if the image is a character card")
-        if (!metadata.containsDirectoryOfType(PngDirectory::class.java)) error("No PNG directory found, please check if the image is a character card")
+        if (!metadata.containsDirectoryOfType(
+                PngDirectory::class.java
+            )) {
+            error("No PNG directory found, please check if the image is a character card")
+        }
 
         val pngDirectory = metadata.getDirectoriesOfType(PngDirectory::class.java)
             .firstOrNull { directory ->
-                directory.pngChunkType == PngChunkType.tEXt
-                    && directory.getString(PngDirectory.TAG_TEXTUAL_DATA).startsWith("[chara:")
+                directory.pngChunkType == PngChunkType.tEXt &&
+                    directory.getString(PngDirectory.TAG_TEXTUAL_DATA).startsWith("[chara:")
             } ?: error("No tEXt chunk found, please check if the image is a character card")
 
         val value = pngDirectory.getString(PngDirectory.TAG_TEXTUAL_DATA)
