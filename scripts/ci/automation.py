@@ -120,6 +120,8 @@ def release_manifest(api, release, upstream_sha):
     if manifest.get("upstream_sha") != upstream_sha or manifest.get("tag") != release["tag_name"]:
         raise RuntimeError("Existing release provenance does not match the upstream tag")
     apk = assets.get(manifest["apk"])
+    if len([name for name in assets if name.endswith(".apk")]) != 1:
+        return None
     if not apk or apk["size"] != manifest["apk_size"] or not manifest.get("certificate_sha256"):
         return None
     checksums = asset_bytes(api, assets["SHA256SUMS"]).decode()
@@ -297,6 +299,21 @@ def upload(args):
             raise RuntimeError("Existing tag points at a different source; refusing to relabel it")
         api.request(f"releases/{release['id']}", "PATCH", {"target_commitish": manifest["source_sha"]})
     assets = {a["name"]: a for a in release["assets"]}
+    if release["draft"]:
+        # A fresh candidate has a different SHA in its filename. Remove obsolete
+        # draft APKs so the published release exposes exactly one compatible APK.
+        for name, asset in list(assets.items()):
+            if name.endswith(".apk") and name != manifest["apk"]:
+                api.request(f"releases/assets/{asset['id']}", "DELETE")
+                del assets[name]
+    else:
+        # Preflight the entire public release before adding anything. A conflicting
+        # checksum/manifest must not leave an additional, ambiguous public APK.
+        if any(name.endswith(".apk") and name != manifest["apk"] for name in assets):
+            raise RuntimeError("Published release has another APK; inspect it before recovery")
+        for name in (manifest["apk"], "SHA256SUMS", "build-info.json"):
+            if name in assets and asset_bytes(api, assets[name]) != (root / name).read_bytes():
+                raise RuntimeError(f"Refusing to replace published asset: {name}")
     # Upload the manifest last: it is the completion marker after the APK/checksums.
     for name in (manifest["apk"], "SHA256SUMS", "build-info.json"):
         path = root / name

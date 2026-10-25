@@ -124,6 +124,11 @@ class ManifestTest(unittest.TestCase):
         with patch.object(automation, "asset_bytes", side_effect=self.data):
             self.assertIsNone(automation.release_manifest(None, self.release, "a" * 40))
 
+    def test_ambiguous_apks_are_not_a_complete_release(self):
+        self.release["assets"].append(dict(name="old.apk", size=20))
+        with patch.object(automation, "asset_bytes", side_effect=self.data):
+            self.assertIsNone(automation.release_manifest(None, self.release, "a" * 40))
+
 
 class GitSafetyTest(unittest.TestCase):
     def test_master_race_prevents_push(self):
@@ -258,6 +263,27 @@ class SecretTest(unittest.TestCase):
 
 
 class UploadRetryTest(unittest.TestCase):
+    def test_rebuilt_draft_removes_obsolete_apk_before_uploading_completion_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = dict(tag="3.1.1", upstream_sha="a" * 40, source_sha="b" * 40, apk="new.apk")
+            for name, data in (("build-info.json", json.dumps(manifest)), ("SHA256SUMS", "checksums"), ("new.apk", "apk")):
+                (root / name).write_text(data)
+            draft = dict(id=1, draft=True, upload_url="https://uploads.github.com/test{?name}",
+                         assets=[dict(id=7, name="old.apk")])
+            args = type("Args", (), dict(directory=temporary, tag="3.1.1", upstream_sha="a" * 40))()
+            api = unittest.mock.Mock()
+            api.release.return_value = draft
+            api.request.return_value = None
+            with patch.object(automation, "GitHub", return_value=api), \
+                    patch.object(automation, "release_manifest", return_value=manifest):
+                automation.upload(args)
+            calls = api.request.call_args_list
+            delete_index = next(i for i, call in enumerate(calls) if call.args == ("releases/assets/7", "DELETE"))
+            uploads = [(i, call.args[0]) for i, call in enumerate(calls) if call.args[1:2] == ("POST",)]
+            self.assertLess(delete_index, uploads[0][0])
+            self.assertTrue(uploads[-1][1].endswith("name=build-info.json"))
+
     def test_upload_failure_leaves_no_completion_marker_and_retry_preserves_apk(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
