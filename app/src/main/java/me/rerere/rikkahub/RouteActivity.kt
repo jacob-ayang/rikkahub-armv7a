@@ -3,6 +3,7 @@ package me.rerere.rikkahub
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
@@ -236,6 +237,8 @@ class RouteActivity : ComponentActivity() {
             pendingIntents.addLast(intent)
             return
         }
+        val streamUris = extractStreamUris(intent)
+        val streamUri = streamUris.firstOrNull()
         val destination = when (intent.action) {
             ACTION_TRANSLATE -> Screen.Translator
             ACTION_MEDIA_CREATION -> {
@@ -244,7 +247,13 @@ class RouteActivity : ComponentActivity() {
             }
             Intent.ACTION_SEND -> Screen.ShareHandler(
                 text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
-                streamUri = intent.getStringExtra(Intent.EXTRA_STREAM),
+                streamUri = streamUri,
+                streamUris = streamUris,
+            )
+            Intent.ACTION_SEND_MULTIPLE -> Screen.ShareHandler(
+                text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
+                streamUri = streamUri,
+                streamUris = streamUris,
             )
             Intent.ACTION_PROCESS_TEXT -> Screen.ShareHandler(
                 text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(),
@@ -255,6 +264,21 @@ class RouteActivity : ComponentActivity() {
         if (destination != null && backStack.lastOrNull() != destination) {
             backStack.add(destination)
         }
+    }
+
+    private fun extractStreamUris(intent: Intent): List<String> {
+        val single = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        if (single != null) return listOf(single.toString())
+        val multiple = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+        if (!multiple.isNullOrEmpty()) return multiple.map { it.toString() }
+        if (intent.clipData != null) {
+            val result = mutableListOf<String>()
+            for (index in 0 until intent.clipData!!.itemCount) {
+                intent.clipData!!.getItemAt(index).uri?.toString()?.let(result::add)
+            }
+            if (result.isNotEmpty()) return result
+        }
+        return emptyList()
     }
 
     // 快捷方式没有指定会话，打开一个空会话
@@ -366,7 +390,8 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.ShareHandler> { key ->
                                 ShareHandlerPage(
                                     text = key.text,
-                                    image = key.streamUri
+                                    image = key.streamUri,
+                                    images = key.streamUris,
                                 )
                             }
 
@@ -660,7 +685,11 @@ sealed interface Screen : NavKey {
     ) : Screen
 
     @Serializable
-    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
+    data class ShareHandler(
+        val text: String,
+        val streamUri: String? = null,
+        val streamUris: List<String> = emptyList(),
+    ) : Screen
 
     @Serializable
     data object History : Screen

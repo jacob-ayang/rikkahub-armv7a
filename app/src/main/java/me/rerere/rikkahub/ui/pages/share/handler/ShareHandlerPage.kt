@@ -36,11 +36,12 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun ShareHandlerPage(text: String, image: String?) {
+fun ShareHandlerPage(text: String, image: String? = null, images: List<String> = emptyList()) {
     val vm: ShareHandlerVM = koinViewModel(parameters = { parametersOf(text) })
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
+    val attachedImages = images.ifEmpty { image?.let(::listOf) ?: emptyList() }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -69,12 +70,14 @@ fun ShareHandlerPage(text: String, image: String?) {
                             style = MaterialTheme.typography.bodySmall
                         )
 
-                        image?.let {
-                            AsyncImage(
-                                model = it,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                        if (attachedImages.isNotEmpty()) {
+                            attachedImages.forEach { uri ->
+                                AsyncImage(
+                                    model = uri,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -88,7 +91,7 @@ fun ShareHandlerPage(text: String, image: String?) {
                             navigateToChatPage(
                                 navigator = navController,
                                 initText = vm.shareText.base64Encode(),
-                                initFiles = image?.let { listOf(it.toUri()) } ?: emptyList()
+                                initFiles = attachedImages.map { it.toUri() }
                             )
                         }
                     },
