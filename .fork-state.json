@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "upstream_sha": "a9e9e53a9a5f9654afa19f1ad54a18ca6dcb0d96",
+  "upstream_sha": "358e2931bf706979f29dd12e0e42105b0e726928",
   "overlay_sha256": "cea5bb9afa886f15aa45da76ca500331375dcb00faea3ab578e4b7cdb83edeb9",
   "release_workflows_omitted": false,
   "build_overlay_sha256": "798f1c2e37f7f484d23f935f59b3be1126d145a92f46eed509073738c4264cc8",
-  "control_sha": "1afefecb1b35dcb2579297a082861e2e1b565bcc",
-  "checked_at": "2026-11-19T08:49:06.717433+00:00"
+  "control_sha": "7fe499362c9f59572737fc9691e042bc9fc23b45",
+  "checked_at": "2026-11-19T21:35:54.756775+00:00"
 }
